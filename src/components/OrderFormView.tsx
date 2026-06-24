@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { CarServiceOrder, OrderStatus, PaymentStatus, CarBrand, User, Box, ClientSource, mechanicIdsForManager } from '../types';
-import { Calendar, Car, User as UserIcon, Phone, Plus, FileText, CheckCircle, ChevronDown, Wrench, UserCheck, Boxes } from 'lucide-react';
+import { Calendar, Car, User as UserIcon, Phone, Plus, FileText, CheckCircle, ChevronDown, Wrench, UserCheck, Boxes, X } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface OrderFormViewProps {
@@ -53,18 +53,18 @@ export default function OrderFormView({ carBrands, allUsers, boxes, currentUser,
   const [status, setStatus] = useState<OrderStatus>('new');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
   const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>([]);
+  const [mechanicToAdd, setMechanicToAdd] = useState('');
   const [assignedServiceType, setAssignedServiceType] = useState('');
   const [saving, setSaving] = useState(false);
 
   const brandRef = useRef<HTMLDivElement>(null);
 
-  // Mechanics (and service managers) can be assigned to do work.
-  // A service manager sees their own box mechanics first, but can assign anyone (#2).
+  // A service manager sees their own box mechanics first, but can assign any mechanic.
   const myMechanicIds = isServiceManagerUser
     ? mechanicIdsForManager(boxes, currentUser.id)
     : (boxes.find(b => b.id === boxId)?.mechanicIds || []);
   const assignableUsers = allUsers
-    .filter(u => (u.role === 'mechanic' || u.role === 'service_manager') && u.username !== 'imedo')
+    .filter(u => u.role === 'mechanic' && u.username !== 'imedo')
     .sort((a, b) => Number(myMechanicIds.includes(b.id)) - Number(myMechanicIds.includes(a.id)));
 
   const filteredBrands = carBrands.filter(b =>
@@ -81,10 +81,10 @@ export default function OrderFormView({ carBrands, allUsers, boxes, currentUser,
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const toggleEmployee = (id: string) => {
-    setAssignedEmployeeIds(prev =>
-      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-    );
+  const addMechanic = () => {
+    if (!mechanicToAdd) return;
+    setAssignedEmployeeIds(prev => prev.includes(mechanicToAdd) ? prev : [...prev, mechanicToAdd]);
+    setMechanicToAdd('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -315,27 +315,21 @@ export default function OrderFormView({ carBrands, allUsers, boxes, currentUser,
           <div className="bg-slate-950/60 border border-slate-800 rounded-xl p-3.5 space-y-3">
             <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-cyan-400" />
-              თანამშრომლის მინიჭება (სურვილისამებრ)
+              ხელოსნების მინიჭება (სურვილისამებრ)
             </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {assignableUsers.map(u => {
-                const isSelected = assignedEmployeeIds.includes(u.id);
-                return (
-                  <button
-                    key={u.id}
-                    type="button"
-                    onClick={() => toggleEmployee(u.id)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-600'
-                    }`}
-                  >
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isSelected ? 'bg-cyan-400' : 'bg-slate-700'}`} />
-                    <span className="text-xs font-semibold truncate">{u.firstName} {u.lastName}</span>
-                  </button>
-                );
+            <div className="flex gap-2">
+              <select value={mechanicToAdd} onChange={e => setMechanicToAdd(e.target.value)} className="min-w-0 flex-1 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200">
+                <option value="">— აირჩიეთ ხელოსანი —</option>
+                {assignableUsers.filter(user => !assignedEmployeeIds.includes(user.id)).map(user => <option key={user.id} value={user.id}>{user.firstName} {user.lastName}</option>)}
+              </select>
+              <button type="button" onClick={addMechanic} disabled={!mechanicToAdd} className="px-4 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs disabled:opacity-40">დამატება</button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {assignedEmployeeIds.map(id => {
+                const user = allUsers.find(item => item.id === id);
+                return <span key={id} className="inline-flex items-center gap-1.5 bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 px-2.5 py-1.5 rounded-lg text-xs font-semibold">{user ? `${user.firstName} ${user.lastName}` : 'უცნობი ხელოსანი'}<button type="button" onClick={() => setAssignedEmployeeIds(prev => prev.filter(item => item !== id))} aria-label="ხელოსნის წაშლა" className="hover:text-white"><X className="w-3.5 h-3.5" /></button></span>;
               })}
+              {assignedEmployeeIds.length === 0 && <span className="text-[11px] text-slate-500">ხელოსანი ჯერ არ არის დამატებული.</span>}
             </div>
 
             {assignedEmployeeIds.length > 0 && serviceTypeNames.length > 0 && (
