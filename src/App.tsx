@@ -313,6 +313,8 @@ export default function App() {
               <OrderFormView
                 carBrands={carBrands}
                 allUsers={users}
+                boxes={boxes}
+                currentUser={currentUser}
                 serviceTypeNames={serviceTypeNames}
                 onAddOrder={handleAddOrder}
                 onCancel={() => { setActiveView('regular-tab'); setCurrentTab('dashboard'); }}

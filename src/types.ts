@@ -300,9 +300,16 @@ export function isAdminRole(role: Role): boolean {
   return role === 'super_admin' || role === 'general_manager' || role === 'service_manager' || role === 'developer';
 }
 
-/** Returns true for roles that have OWNER-level full access (owner & general manager are equivalent) */
+/**
+ * Roles with OWNER-level full access to everything.
+ * - super_admin: მფლობელი (owner)
+ * - general_manager: გენერალური მენეჯერი (sees everything, owner-like)
+ * - developer: პროგ. ადმინისტრატორი — full unrestricted access (manages the
+ *   whole program, adds users, sees absolutely everything). Still hidden from
+ *   personnel lists and never counted in salaries/profit.
+ */
 export function isOwnerLike(role: Role): boolean {
-  return role === 'super_admin' || role === 'general_manager';
+  return role === 'super_admin' || role === 'general_manager' || role === 'developer';
 }
 
 /** Shop-floor roles whose access is limited to specific modules (no orders dashboard) */
