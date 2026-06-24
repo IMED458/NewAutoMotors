@@ -4,6 +4,15 @@ import { hashPassword } from '../utils/crypto';
 import { UserPlus, Trash2, Shield, Wrench, AlertCircle, Edit, Save, X, Crown } from 'lucide-react';
 import { motion } from 'motion/react';
 
+/** Sensible default module access for a freshly-created user of a given role. */
+function defaultModulesForRole(role: Role): string[] {
+  if (role === 'super_admin' || role === 'general_manager') return ['shop', 'day_closing', 'reports'];
+  if (role === 'shop') return ['shop'];
+  if (role === 'cashier') return ['shop', 'day_closing'];
+  if (role === 'accountant') return ['reports'];
+  return [];
+}
+
 interface EmployeesViewProps {
   users: User[];
   currentUser: User;
@@ -13,9 +22,8 @@ interface EmployeesViewProps {
 }
 
 export default function EmployeesView({ users, currentUser, onAddUser, onUpdateUser, onDeleteUser }: EmployeesViewProps) {
-  // Manager has same full permissions as super_admin
+  // Owner & general manager have full personnel-management permissions
   const isOwner = isOwnerLike(currentUser.role);
-  const isAdmin = currentUser.role === 'admin';
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -52,7 +60,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
       username: username.trim().toLowerCase(),
       passwordHash: hashPassword(password),
       role,
-      enabledModules: role === 'super_admin' || role === 'manager' ? ['shop', 'day_closing', 'reports'] : [],
+      enabledModules: defaultModulesForRole(role),
     });
     setSuccess('თანამშრომელი დაემატა!');
     setFirstName(''); setLastName(''); setUsername(''); setPassword('');
@@ -108,62 +116,58 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   ];
 
   const getRoleIcon = (r: Role) => {
-    if (r === 'super_admin') return <Crown className="w-4 h-4" />;
-    if (r === 'admin') return <Shield className="w-4 h-4" />;
-    if (r === 'manager') return <Crown className="w-4 h-4" />;
+    if (r === 'super_admin' || r === 'general_manager') return <Crown className="w-4 h-4" />;
+    if (r === 'service_manager') return <Shield className="w-4 h-4" />;
     return <Wrench className="w-4 h-4" />;
   };
 
   const getRoleStyle = (r: Role) => {
     if (r === 'super_admin') return 'bg-purple-500/10 border-purple-500/20 text-purple-400';
-    if (r === 'admin') return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
-    if (r === 'manager') return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400';
+    if (r === 'general_manager') return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400';
+    if (r === 'service_manager') return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+    if (r === 'shop') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
+    if (r === 'cashier') return 'bg-teal-500/10 border-teal-500/20 text-teal-400';
+    if (r === 'accountant') return 'bg-rose-500/10 border-rose-500/20 text-rose-400';
     return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400';
   };
 
-  // All available roles — owner/manager can assign any role; admin can only assign mechanic/manager
+  // All assignable roles (the protected analyst/developer role is never assignable here)
   const allRoleOptions: { value: Role; label: string }[] = [
     { value: 'super_admin', label: 'მფლობელი' },
-    { value: 'manager', label: 'მენეჯერი' },
-    { value: 'admin', label: 'ადმინი' },
+    { value: 'general_manager', label: 'გენერალური მენეჯერი' },
+    { value: 'service_manager', label: 'სერვის მენეჯერი' },
     { value: 'mechanic', label: 'ხელოსანი' },
+    { value: 'shop', label: 'მაღაზია' },
+    { value: 'cashier', label: 'მოლარე' },
+    { value: 'accountant', label: 'ბუღალტერი' },
   ];
 
-  const availableRoles = isOwner
-    ? allRoleOptions
-    : [
-        { value: 'mechanic' as Role, label: 'ხელოსანი' },
-        { value: 'manager' as Role, label: 'მენეჯერი' },
-      ];
+  const availableRoles = allRoleOptions;
 
   const canEdit = (u: User) => {
     if (u.id === currentUser.id) return true;
-    if (isOwner) return true;
-    if (isAdmin && u.role === 'mechanic') return true;
-    return false;
+    return isOwner;
   };
 
   const canDelete = (u: User) => {
     if (u.id === currentUser.id) return false;
-    // Protect the developer account from deletion
+    // Protect the analyst/system account from deletion
     if (u.username === 'imedo') return false;
-    if (isOwner) return true;
-    if (isAdmin && u.role === 'mechanic') return true;
-    return false;
+    return isOwner;
   };
 
   // Can we change this user's role in the edit modal?
   const canEditRole = (u: User) => {
     if (u.id === currentUser.id) return false;  // can't change own role
-    if (u.username === 'imedo') return false;    // protect dev account role
-    return isOwner || isAdmin;
+    if (u.username === 'imedo') return false;    // protect analyst account role
+    return isOwner;
   };
 
   return (
     <div className="max-w-lg mx-auto p-4 pb-28 bg-slate-950 text-slate-100 font-sans md:max-w-2xl">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-bold text-slate-300">პერსონალი ({users.length})</h3>
-        {(isOwner || isAdmin) && (
+        {isOwner && (
           <button
             onClick={() => { setShowAddForm(!showAddForm); setError(''); }}
             className="flex items-center gap-1.5 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-2 rounded-xl cursor-pointer transition-colors">

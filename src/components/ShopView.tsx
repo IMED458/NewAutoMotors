@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Product, ProductSale, CarServiceOrder, DailyClosing, ServiceItem, User } from '../types';
+import { Product, ProductSale, CarServiceOrder, DailyClosing, ServiceItem, User, isOwnerLike } from '../types';
 import { ShoppingBag, Package, CalendarCheck } from 'lucide-react';
 import POSSection from './POSSection';
 import ProductsSection from './ProductsSection';
@@ -28,7 +28,7 @@ export default function ShopView({
   onRefillStock, onAddSale, onConfirmCloseDay,
 }: ShopViewProps) {
   const [tab, setTab] = useState<ShopTab>('pos');
-  const isPrivileged = ['super_admin', 'admin', 'manager'].includes(currentUser.role);
+  const isPrivileged = isOwnerLike(currentUser.role);
 
   return (
     <div className="pb-20">

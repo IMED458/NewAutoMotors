@@ -1,4 +1,12 @@
-export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic' | 'developer';
+export type Role =
+  | 'super_admin'       // მფლობელი (owner) — full access, profit owner
+  | 'general_manager'   // გენერალური მენეჯერი — sees everything, owner-like
+  | 'service_manager'   // სერვის მენეჯერი — manages own boxes & mechanics
+  | 'mechanic'          // ხელოსანი
+  | 'shop'              // მაღაზია — shop module only
+  | 'cashier'           // მოლარე
+  | 'accountant'        // ბუღალტერი
+  | 'developer';        // პროგ. ანალიტიკოსი (hidden system account)
 
 export interface User {
   id: string;
@@ -163,10 +171,13 @@ export interface CarBrand {
 
 export const ROLE_LABELS: Record<Role, string> = {
   super_admin: 'მფლობელი',
-  admin: 'ადმინისტრატორი',
-  manager: 'მენეჯერი',
+  general_manager: 'გენერალური მენეჯერი',
+  service_manager: 'სერვის მენეჯერი',
   mechanic: 'ხელოსანი',
-  developer: 'პროგ. ადმინი',
+  shop: 'მაღაზია',
+  cashier: 'მოლარე',
+  accountant: 'ბუღალტერი',
+  developer: 'პროგ. ანალიტიკოსი',
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
@@ -186,15 +197,38 @@ export const DEFAULT_SERVICE_CONFIGS: ServiceTypeConfig[] = [
   { id: 'other', name: 'სხვა სამუშაოები', percentageReward: 50, flatReward: 0, rewardType: 'percentage' },
 ];
 
-export const DEFAULT_CAR_BRANDS: CarBrand[] = [
-  { id: 'cb-mb', name: 'MERCEDES-BENZ' },
-  { id: 'cb-daf', name: 'DAF' },
-  { id: 'cb-scania', name: 'SCANIA' },
-  { id: 'cb-man', name: 'MAN' },
-  { id: 'cb-iveco', name: 'IVECO' },
-  { id: 'cb-volvo', name: 'VOLVO' },
-  { id: 'cb-renault', name: 'RENAULT' },
+// Comprehensive list of car / truck / commercial vehicle brands.
+const CAR_BRAND_NAMES: string[] = [
+  // Trucks & commercial (kept first for this auto-service context)
+  'MERCEDES-BENZ', 'MAN', 'SCANIA', 'DAF', 'IVECO', 'VOLVO', 'RENAULT',
+  'KAMAZ', 'MAZ', 'KRAZ', 'GAZ', 'ZIL', 'URAL', 'ISUZU', 'HINO', 'FUSO',
+  'FREIGHTLINER', 'KENWORTH', 'PETERBILT', 'INTERNATIONAL', 'MACK', 'WESTERN STAR',
+  // Passenger & SUV
+  'TOYOTA', 'LEXUS', 'HONDA', 'ACURA', 'NISSAN', 'INFINITI', 'MAZDA',
+  'MITSUBISHI', 'SUBARU', 'SUZUKI', 'DAIHATSU', 'ISUZU MOTORS',
+  'HYUNDAI', 'KIA', 'GENESIS', 'SSANGYONG', 'DAEWOO',
+  'VOLKSWAGEN', 'AUDI', 'BMW', 'MINI', 'PORSCHE', 'OPEL', 'SKODA', 'SEAT', 'CUPRA',
+  'FORD', 'LINCOLN', 'CHEVROLET', 'CADILLAC', 'BUICK', 'GMC', 'DODGE', 'CHRYSLER',
+  'JEEP', 'RAM', 'TESLA', 'RIVIAN', 'LUCID',
+  'FIAT', 'ALFA ROMEO', 'LANCIA', 'MASERATI', 'FERRARI', 'LAMBORGHINI', 'PAGANI', 'ABARTH',
+  'PEUGEOT', 'CITROEN', 'DS', 'DACIA', 'BUGATTI',
+  'JAGUAR', 'LAND ROVER', 'ROVER', 'ASTON MARTIN', 'BENTLEY', 'ROLLS-ROYCE',
+  'LOTUS', 'MCLAREN', 'MG', 'VAUXHALL',
+  'VOLVO CARS', 'POLESTAR', 'SAAB',
+  'LADA', 'UAZ', 'MOSKVICH',
+  // Chinese
+  'BYD', 'CHERY', 'GEELY', 'GREAT WALL', 'HAVAL', 'JAC', 'LIFAN', 'FAW',
+  'DONGFENG', 'FOTON', 'BAIC', 'BRILLIANCE', 'ZOTYE', 'HONGQI', 'NIO',
+  'XPENG', 'LI AUTO', 'MAXUS', 'WULING', 'CHANGAN', 'GAC', 'OMODA', 'JAECOO',
+  // Other / misc
+  'SMART', 'HUMMER', 'SCION', 'PONTIAC', 'SATURN', 'OLDSMOBILE', 'MERCURY',
+  'TATA', 'MAHINDRA', 'PROTON', 'PERODUA', 'VINFAST',
 ];
+
+export const DEFAULT_CAR_BRANDS: CarBrand[] = CAR_BRAND_NAMES.map(name => ({
+  id: 'cb-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''),
+  name,
+}));
 
 export function calculateMechanicEarning(
   serviceType: string,
@@ -220,15 +254,20 @@ export function calculateMechanicEarning(
 }
 
 export function hasModule(user: User, mod: string): boolean {
-  return user.role === 'super_admin' || user.role === 'developer' || (user.enabledModules ?? []).includes(mod);
+  return isOwnerLike(user.role) || user.role === 'developer' || (user.enabledModules ?? []).includes(mod);
 }
 
-/** Returns true for roles that have dashboard/admin-like access */
+/** Returns true for roles that have the orders dashboard / admin-like access */
 export function isAdminRole(role: Role): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'developer';
+  return role === 'super_admin' || role === 'general_manager' || role === 'service_manager' || role === 'developer';
 }
 
-/** Returns true for roles that have OWNER-level full access (super_admin and manager are equivalent) */
+/** Returns true for roles that have OWNER-level full access (owner & general manager are equivalent) */
 export function isOwnerLike(role: Role): boolean {
-  return role === 'super_admin' || role === 'manager';
+  return role === 'super_admin' || role === 'general_manager';
+}
+
+/** Shop-floor roles whose access is limited to specific modules (no orders dashboard) */
+export function isLimitedModuleRole(role: Role): boolean {
+  return role === 'shop' || role === 'cashier' || role === 'accountant';
 }

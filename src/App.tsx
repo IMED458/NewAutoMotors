@@ -78,19 +78,7 @@ export default function App() {
           DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
           await batch.commit();
         } else {
-          // Ensure owner (super_admin) account exists and credentials are up-to-date
-          const ownerDoc = usersSnap.docs.find(d => d.data().role === 'super_admin' || d.data().username === 'zviad' || d.data().username === 'zviadi');
-          if (!ownerDoc) {
-            // No owner at all — create one
-            await setDoc(doc(db, 'users', INITIAL_USERS[0].id), INITIAL_USERS[0]);
-          } else if (ownerDoc.data().username !== 'zviadi') {
-            // Owner exists but has old username — migrate credentials
-            await updateDoc(doc(db, 'users', ownerDoc.id), {
-              username: INITIAL_USERS[0].username,
-              passwordHash: INITIAL_USERS[0].passwordHash,
-            });
-          }
-          // Ensure developer account (imedo) exists with correct role
+          // Always ensure the protected analyst (developer) account exists with the correct role.
           const devUser = INITIAL_USERS.find(u => u.username === 'imedo')!;
           const devDoc = usersSnap.docs.find(d => d.data().username === 'imedo');
           if (!devDoc) {
@@ -369,7 +357,7 @@ export default function App() {
                       onConfirmCloseDay={handleConfirmCloseDay}
                     />
                   )}
-                  {currentTab === 'settings' && (isOwnerLike(currentUser.role) || currentUser.role === 'admin') && (
+                  {currentTab === 'settings' && isOwnerLike(currentUser.role) && (
                     <SettingsView
                       serviceConfigs={serviceConfigs}
                       carBrands={carBrands}

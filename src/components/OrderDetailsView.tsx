@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, calculateMechanicEarning, ROLE_LABELS,
-  ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
+  ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isOwnerLike,
 } from '../types';
 import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -23,7 +23,7 @@ export default function OrderDetailsView({
   order, services, mechanics, allUsers, currentUser, serviceConfigs, onSaveTransaction, onBack, onDeleteOrder,
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
-  const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'manager';
+  const isAdminLike = isAdminRole(currentUser.role);
 
   const [draftOrder, setDraftOrder] = useState<CarServiceOrder>({ ...order });
   const [draftServices, setDraftServices] = useState<ServiceItem[]>(() =>
@@ -168,7 +168,7 @@ export default function OrderDetailsView({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500 font-mono">ID: {draftOrder.id.split('-')[1] || draftOrder.id}</span>
-          {(currentUser.role === 'super_admin' || currentUser.role === 'manager') && onDeleteOrder && (
+          {isOwnerLike(currentUser.role) && onDeleteOrder && (
             <button
               onClick={() => { if (confirm('ნამდვილად წაიშალოს ეს დავალება? (ყველა სერვისი წაიშლება)')) onDeleteOrder(order.id); }}
               className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 bg-red-950/20 border border-red-500/20 px-2.5 py-1.5 rounded-xl cursor-pointer"
@@ -277,7 +277,7 @@ export default function OrderDetailsView({
                 <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                   {(['new', 'pending', 'completed'] as OrderStatus[]).map(st => (
                     <button key={st} onClick={() => setDraftOrder(prev => ({ ...prev, status: st }))}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      className={`min-w-0 px-0.5 py-2 text-[9px] leading-tight text-center font-bold rounded-lg transition-all cursor-pointer break-words ${
                         draftOrder.status === st
                           ? st === 'new' ? 'bg-amber-500 text-slate-950 animate-pulse'
                             : st === 'pending' ? 'bg-sky-500 text-slate-950'

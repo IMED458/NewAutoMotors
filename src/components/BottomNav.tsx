@@ -14,14 +14,14 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
   if (isAdminRole(role)) {
     tabs.push({ id: 'dashboard', label: 'დაფა', icon: LayoutDashboard });
     tabs.push({ id: 'history', label: 'ისტორია', icon: History });
-    if (isOwnerLike(role) || role === 'admin') {
+    if (isOwnerLike(role)) {
       tabs.push({ id: 'employees', label: 'პერსონალი', icon: Users });
     }
     if (hasModule(currentUser, 'reports')) tabs.push({ id: 'reports', label: 'ანგარიში', icon: BarChart3 });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
     tabs.push({ id: 'earnings', label: 'ჩემი', icon: TrendingUp });
-    if (isOwnerLike(role) || role === 'admin') {
+    if (isOwnerLike(role)) {
       tabs.push({ id: 'settings', label: 'პარამეტრი', icon: Settings });
     }
   } else {
