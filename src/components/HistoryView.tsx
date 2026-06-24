@@ -18,10 +18,12 @@ interface HistoryViewProps {
   services: ServiceItem[];
   mechanics: User[];
   serviceConfigs: ServiceTypeConfig[];
+  currentUser: User;
+  allUsers: User[];
   onSelectOrder: (id: string) => void;
 }
 
-export default function HistoryView({ orders, services, mechanics, serviceConfigs, onSelectOrder }: HistoryViewProps) {
+export default function HistoryView({ orders, services, mechanics, serviceConfigs, currentUser, allUsers, onSelectOrder }: HistoryViewProps) {
   const [filterCarPlate, setFilterCarPlate] = useState('');
   const [filterClientName, setFilterClientName] = useState('');
   const [filterDate, setFilterDate] = useState('');
@@ -29,6 +31,11 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
   const [filterServiceType, setFilterServiceType] = useState<string>('');
   const [filterPayment, setFilterPayment] = useState<string>('');
   const [filterWorkStatus, setFilterWorkStatus] = useState<string>('all');
+  // #11: source filter — cars I added vs cars a service manager added
+  const [filterSource, setFilterSource] = useState<'all' | 'mine' | 'manager'>('all');
+
+  const roleOf = (userId: string) => allUsers.find(u => u.id === userId)?.role;
+  const isMechanic = currentUser.role === 'mechanic';
 
   const resetFilters = () => {
     setFilterCarPlate('');
@@ -38,6 +45,7 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
     setFilterServiceType('');
     setFilterPayment('');
     setFilterWorkStatus('all');
+    setFilterSource('all');
   };
 
   const getServiceLabel = (typeId: string) => serviceConfigs.find(c => c.id === typeId)?.name || typeId;
@@ -51,6 +59,8 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
       if (filterWorkStatus === 'completed' && order.status !== 'completed') return false;
       if (filterWorkStatus === 'ongoing' && order.status === 'completed') return false;
     }
+    if (filterSource === 'mine' && order.createdBy !== currentUser.id) return false;
+    if (filterSource === 'manager' && roleOf(order.createdBy) !== 'service_manager') return false;
     const orderSrvList = services.filter(s => s.orderId === order.id);
     if (filterMechanicId && !orderSrvList.some(s => s.mechanicId === filterMechanicId || s.coMechanicId === filterMechanicId)) return false;
     if (filterServiceType && !orderSrvList.some(s => s.serviceType === filterServiceType)) return false;
@@ -74,6 +84,26 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
           <RefreshCw className="w-3.5 h-3.5" /> გასუფთავება
         </button>
       </div>
+
+      {/* Source filter (#11): mine / manager-added */}
+      {isMechanic && (
+        <div className="flex gap-1.5 mb-4">
+          {([
+            { id: 'all', label: 'ყველა' },
+            { id: 'mine', label: 'ჩემი დამატებული' },
+            { id: 'manager', label: 'მენეჯერის დამატებული' },
+          ] as { id: 'all' | 'mine' | 'manager'; label: string }[]).map(opt => (
+            <button key={opt.id} onClick={() => setFilterSource(opt.id)}
+              className={`whitespace-nowrap px-3.5 py-1.5 rounded-full text-xs font-semibold cursor-pointer transition-all border ${
+                filterSource === opt.id
+                  ? 'bg-cyan-500 border-cyan-500 text-slate-950 font-bold'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-100'
+              }`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 shadow-lg space-y-3">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { ServiceTypeConfig, CarBrand, User, DEFAULT_CAR_BRANDS } from '../types';
-import { Plus, Edit, Trash, Save, X, Settings, Car, Wrench, UserPlus, Check } from 'lucide-react';
+import { ServiceTypeConfig, CarBrand, User, DEFAULT_CAR_BRANDS, RevenueShareConfig } from '../types';
+import { Plus, Edit, Trash, Save, X, Settings, Car, Wrench, UserPlus, Check, Percent } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface SettingsViewProps {
@@ -8,18 +8,35 @@ interface SettingsViewProps {
   carBrands: CarBrand[];
   users: User[];
   currentUser: User;
+  revenueShare: RevenueShareConfig;
   onSaveServiceConfigs: (configs: ServiceTypeConfig[]) => void;
   onSaveCarBrands: (brands: CarBrand[]) => void;
+  onSaveRevenueShare: (cfg: RevenueShareConfig) => void;
   onUpdateUser: (userId: string, updates: Partial<User>) => void;
 }
 
-type SubTab = 'services' | 'brands';
+type SubTab = 'services' | 'brands' | 'revenue';
 
 export default function SettingsView({
-  serviceConfigs, carBrands, users, currentUser,
-  onSaveServiceConfigs, onSaveCarBrands,
+  serviceConfigs, carBrands, users, currentUser, revenueShare,
+  onSaveServiceConfigs, onSaveCarBrands, onSaveRevenueShare,
 }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<SubTab>('services');
+
+  // Revenue-share editing (#3) — local draft of the four percentages
+  const [rsMechMech, setRsMechMech] = useState(revenueShare.mechanicSourced.mechanicPct);
+  const [rsMechMgr, setRsMechMgr] = useState(revenueShare.mechanicSourced.serviceManagerPct);
+  const [rsSvcMech, setRsSvcMech] = useState(revenueShare.serviceSourced.mechanicPct);
+  const [rsSvcMgr, setRsSvcMgr] = useState(revenueShare.serviceSourced.serviceManagerPct);
+  const saveRevenue = () => {
+    onSaveRevenueShare({
+      id: 'global',
+      mechanicSourced: { mechanicPct: Number(rsMechMech) || 0, serviceManagerPct: Number(rsMechMgr) || 0 },
+      serviceSourced: { mechanicPct: Number(rsSvcMech) || 0, serviceManagerPct: Number(rsSvcMgr) || 0 },
+    });
+    setSuccess('პროცენტები შენახულია!');
+    setTimeout(() => setSuccess(''), 3000);
+  };
 
   // Service configs state
   const [showAddSrv, setShowAddSrv] = useState(false);
@@ -179,7 +196,11 @@ export default function SettingsView({
         </button>
         <button onClick={() => setActiveTab('brands')}
           className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex justify-center items-center gap-1.5 ${activeTab === 'brands' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}>
-          <Car className="w-4 h-4" /> მანქანის მარკები
+          <Car className="w-4 h-4" /> მარკები
+        </button>
+        <button onClick={() => setActiveTab('revenue')}
+          className={`flex-1 py-2.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex justify-center items-center gap-1.5 ${activeTab === 'revenue' ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}>
+          <Percent className="w-4 h-4" /> პროცენტები
         </button>
       </div>
 
@@ -444,6 +465,58 @@ export default function SettingsView({
           {carBrands.length === 0 && (
             <div className="text-center py-8 text-slate-500 text-xs">მარკები არ მოიძებნა</div>
           )}
+        </div>
+      )}
+
+      {/* Revenue share Tab (#3) */}
+      {activeTab === 'revenue' && (
+        <div className="space-y-4">
+          <p className="text-xs text-slate-400">
+            მომსახურების ფასიდან ხელოსნისა და სერვის მენეჯერის წილი (%). დანარჩენი რჩება მფლობელს.
+            წილი დამოკიდებულია იმაზე, თუ ვინ მოიყვანა კლიენტი.
+          </p>
+
+          <div className="bg-slate-900 border border-cyan-500/20 rounded-2xl p-4 space-y-3">
+            <h4 className="text-sm font-bold text-cyan-400">ხელოსანმა მოიყვანა კლიენტი</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 font-semibold mb-1">ხელოსნის %</label>
+                <input type="number" value={rsMechMech} onChange={e => setRsMechMech(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-cyan-500/50" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 font-semibold mb-1">სერვის მენეჯერის %</label>
+                <input type="number" value={rsMechMgr} onChange={e => setRsMechMgr(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-cyan-500/50" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500">მფლობელი იღებს: {Math.max(0, 100 - (Number(rsMechMech) || 0) - (Number(rsMechMgr) || 0))}%</p>
+          </div>
+
+          <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-4 space-y-3">
+            <h4 className="text-sm font-bold text-amber-400">სერვისმა მოიყვანა კლიენტი</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] text-slate-400 font-semibold mb-1">ხელოსნის %</label>
+                <input type="number" value={rsSvcMech} onChange={e => setRsSvcMech(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-amber-500/50" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 font-semibold mb-1">სერვის მენეჯერის %</label>
+                <input type="number" value={rsSvcMgr} onChange={e => setRsSvcMgr(Number(e.target.value))}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 font-mono focus:outline-none focus:border-amber-500/50" />
+              </div>
+            </div>
+            <p className="text-[10px] text-slate-500">მფლობელი იღებს: {Math.max(0, 100 - (Number(rsSvcMech) || 0) - (Number(rsSvcMgr) || 0))}%</p>
+          </div>
+
+          <button onClick={saveRevenue}
+            className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-xl cursor-pointer flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
+            <Save className="w-4 h-4" /> პროცენტების შენახვა
+          </button>
+          <p className="text-[10px] text-slate-500 text-center">
+            ცვლილება მოქმედებს ახალ ჩანაწერებზე. არსებული შეკვეთის გადასაანგარიშებლად შეცვალეთ „ვინ მოიყვანა" ფინანსებში.
+          </p>
         </div>
       )}
     </div>

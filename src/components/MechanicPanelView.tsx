@@ -4,8 +4,8 @@
  */
 
 import React, { useState } from 'react';
-import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, isOwnerLike } from '../types';
-import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users } from 'lucide-react';
+import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, Box, isOwnerLike, boxesForManager, mechanicIdsForManager } from '../types';
+import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users, Boxes, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface MechanicPanelViewProps {
@@ -14,6 +14,7 @@ interface MechanicPanelViewProps {
   currentUser: User;
   allUsers: User[];
   serviceConfigs: ServiceTypeConfig[];
+  boxes: Box[];
   onSelectOrder: (id: string) => void;
 }
 
@@ -60,7 +61,8 @@ function OwnerProfitView({
     const wages = srvList.reduce((s, x) => {
       const mechWage = ownerIds.has(x.mechanicId) ? 0 : x.mechanicEarning;
       const coWage = (x.coMechanicId && ownerIds.has(x.coMechanicId)) ? 0 : (x.coMechanicEarning || 0);
-      return s + mechWage + coWage;
+      const mgrWage = (x.serviceManagerId && !ownerIds.has(x.serviceManagerId)) ? (x.serviceManagerEarning || 0) : 0;
+      return s + mechWage + coWage + mgrWage;
     }, 0);
     return { revenue, wages, profit: revenue - wages };
   };
@@ -107,9 +109,11 @@ function OwnerProfitView({
   const nonOwnerUsers = allUsers.filter(u => !ownerIds.has(u.id) && u.role !== 'developer');
   const employeeWages = nonOwnerUsers.map(u => {
     const wages = services.reduce((sum, s) => {
-      if (s.mechanicId === u.id) return sum + s.mechanicEarning;
-      if (s.coMechanicId === u.id) return sum + (s.coMechanicEarning || 0);
-      return sum;
+      let w = 0;
+      if (s.mechanicId === u.id) w += s.mechanicEarning;
+      if (s.coMechanicId === u.id) w += (s.coMechanicEarning || 0);
+      if (s.serviceManagerId === u.id) w += (s.serviceManagerEarning || 0);
+      return sum + w;
     }, 0);
     return { user: u, wages };
   }).filter(e => e.wages > 0).sort((a, b) => b.wages - a.wages);
@@ -453,6 +457,124 @@ function EmployeeEarningsView({
 }
 
 // ──────────────────────────────────────────────
+// Service manager panel — own boxes, own mechanics, own & their wages
+// ──────────────────────────────────────────────
+function ServiceManagerPanelView({ services, currentUser, allUsers, boxes }: MechanicPanelViewProps) {
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const myBoxes = boxesForManager(boxes, currentUser.id);
+  const myMechanicIds = mechanicIdsForManager(boxes, currentUser.id);
+
+  const inRange = (createdAt: string) => {
+    if (startDate && createdAt.slice(0, 10) < startDate) return false;
+    if (endDate && createdAt.slice(0, 10) > endDate) return false;
+    return true;
+  };
+  const filtered = services.filter(s => inRange(s.createdAt));
+
+  const myEarnings = filtered
+    .filter(s => s.serviceManagerId === currentUser.id)
+    .reduce((sum, s) => sum + (s.serviceManagerEarning || 0), 0);
+
+  const mechWage = (id: string) => filtered.reduce((sum, s) => {
+    let w = 0;
+    if (s.mechanicId === id) w += s.mechanicEarning;
+    if (s.coMechanicId === id) w += (s.coMechanicEarning || 0);
+    return sum + w;
+  }, 0);
+
+  const userName = (id: string) => {
+    const u = allUsers.find(x => x.id === id);
+    return u ? `${u.firstName} ${u.lastName}`.trim() : '—';
+  };
+
+  const mechanicsRows = myMechanicIds.map(id => ({ id, name: userName(id), wage: mechWage(id) }))
+    .sort((a, b) => b.wage - a.wage);
+  const teamTotal = mechanicsRows.reduce((s, r) => s + r.wage, 0);
+
+  return (
+    <div className="max-w-lg mx-auto p-4 pb-24 bg-slate-950 text-slate-100 font-sans md:max-w-2xl">
+      <div className="bg-gradient-to-r from-amber-600 to-orange-700 rounded-2xl p-5 mb-5 shadow-lg relative overflow-hidden">
+        <div className="relative z-10">
+          <span className="text-xs uppercase tracking-widest font-black text-amber-200">სერვის მენეჯერის პანელი</span>
+          <h2 className="text-xl font-black mt-0.5">{currentUser.firstName} {currentUser.lastName}</h2>
+          <p className="text-[11px] text-amber-100/90 mt-1">თქვენი ბოქსები, ხელოსნები და ანაზღაურება.</p>
+        </div>
+        <div className="absolute right-0 bottom-0 top-0 opacity-10 flex items-center justify-center">
+          <ShieldCheck className="w-40 h-40 rotate-[15deg] translate-x-10 translate-y-10" />
+        </div>
+      </div>
+
+      {/* Date filter */}
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div>
+          <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-დან</label>
+          <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500" />
+        </div>
+        <div>
+          <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-მდე</label>
+          <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500" />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-slate-900 border border-amber-500/20 p-3.5 rounded-xl">
+          <span className="text-[10px] text-slate-400 font-bold uppercase block">ჩემი ანაზღაურება</span>
+          <div className="text-lg font-black font-mono mt-1 text-amber-400">{myEarnings.toLocaleString()} ₾</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
+          <span className="text-[10px] text-slate-400 font-bold uppercase block flex items-center gap-1"><Boxes className="w-3 h-3" /> ბოქსები</span>
+          <div className="text-lg font-black font-mono mt-1 text-slate-200">{myBoxes.length}</div>
+        </div>
+        <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
+          <span className="text-[10px] text-slate-400 font-bold uppercase block flex items-center gap-1"><Wrench className="w-3 h-3" /> ხელოსნები</span>
+          <div className="text-lg font-black font-mono mt-1 text-slate-200">{myMechanicIds.length}</div>
+        </div>
+      </div>
+
+      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5 flex items-center gap-1.5">
+        <Users className="w-3.5 h-3.5" /> ჩემი ხელოსნების ანაზღაურება
+      </h3>
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 space-y-2.5">
+        {mechanicsRows.length === 0 ? (
+          <p className="text-xs text-slate-500 text-center py-3">ბოქსებში ხელოსნები ჯერ არ არის მიბმული.</p>
+        ) : (
+          <>
+            {mechanicsRows.map(r => (
+              <div key={r.id} className="flex items-center justify-between py-1 border-b border-slate-800/40 last:border-0">
+                <span className="text-sm text-slate-300 font-semibold">{r.name}</span>
+                <span className="font-mono font-bold text-cyan-400">{r.wage.toLocaleString()} ₾</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-1 border-t border-slate-700/60">
+              <span className="text-xs text-slate-400 font-bold uppercase">გუნდის ჯამი</span>
+              <span className="font-mono font-black text-cyan-400 text-sm">{teamTotal.toLocaleString()} ₾</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5 flex items-center gap-1.5">
+        <Boxes className="w-3.5 h-3.5" /> ჩემი ბოქსები
+      </h3>
+      <div className="space-y-2">
+        {myBoxes.length === 0 ? (
+          <p className="text-xs text-slate-500 text-center py-3 bg-slate-900/40 rounded-xl border border-slate-800">ბოქსები ჯერ არ გაქვთ მინიჭებული.</p>
+        ) : myBoxes.map(b => (
+          <div key={b.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
+            <span className="font-bold text-slate-200 flex items-center gap-2"><Boxes className="w-4 h-4 text-amber-400" /> {b.name}</span>
+            <span className="text-[11px] text-slate-500">{(b.mechanicIds || []).length} ხელოსანი</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────
 // Main export — switches based on role
 // ──────────────────────────────────────────────
 export default function MechanicPanelView(props: MechanicPanelViewProps) {
@@ -463,9 +585,13 @@ export default function MechanicPanelView(props: MechanicPanelViewProps) {
         services={props.services}
         allUsers={props.allUsers}
         serviceConfigs={props.serviceConfigs}
+        boxes={props.boxes}
         onSelectOrder={props.onSelectOrder}
       />
     );
+  }
+  if (props.currentUser.role === 'service_manager') {
+    return <ServiceManagerPanelView {...props} />;
   }
   return <EmployeeEarningsView {...props} />;
 }

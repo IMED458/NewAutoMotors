@@ -329,6 +329,7 @@ export default function App() {
                 allUsers={users}
                 currentUser={currentUser}
                 serviceConfigs={serviceConfigs}
+                revenueShare={revenueShare}
                 onSaveTransaction={handleSaveOrderTransaction}
                 onBack={() => setActiveView('regular-tab')}
                 onDeleteOrder={handleDeleteOrder}
@@ -353,6 +354,8 @@ export default function App() {
                       services={services}
                       mechanics={executorsList}
                       serviceConfigs={serviceConfigs}
+                      currentUser={currentUser}
+                      allUsers={users}
                       onSelectOrder={handleSelectOrder}
                     />
                   )}
@@ -401,8 +404,10 @@ export default function App() {
                       carBrands={carBrands}
                       users={users}
                       currentUser={currentUser}
+                      revenueShare={revenueShare}
                       onSaveServiceConfigs={handleSaveServiceConfigs}
                       onSaveCarBrands={handleSaveCarBrands}
+                      onSaveRevenueShare={handleSaveRevenueShare}
                       onUpdateUser={handleUpdateUser}
                     />
                   )}
@@ -413,6 +418,7 @@ export default function App() {
                       currentUser={currentUser}
                       allUsers={users}
                       serviceConfigs={serviceConfigs}
+                      boxes={boxes}
                       onSelectOrder={handleSelectOrder}
                     />
                   )}
@@ -427,6 +433,7 @@ export default function App() {
                       currentUser={currentUser}
                       allUsers={users}
                       serviceConfigs={serviceConfigs}
+                      boxes={boxes}
                       onSelectOrder={handleSelectOrder}
                     />
                   )}
@@ -445,6 +452,8 @@ export default function App() {
                       services={services}
                       mechanics={executorsList}
                       serviceConfigs={serviceConfigs}
+                      currentUser={currentUser}
+                      allUsers={users}
                       onSelectOrder={handleSelectOrder}
                     />
                   )}

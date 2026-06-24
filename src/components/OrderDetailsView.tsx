@@ -3,6 +3,7 @@ import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, calculateMechanicEarning, ROLE_LABELS,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isOwnerLike,
+  RevenueShareConfig, ClientSource, computeRevenueShares,
 } from '../types';
 import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -14,16 +15,26 @@ interface OrderDetailsViewProps {
   allUsers: User[];
   currentUser: User;
   serviceConfigs: ServiceTypeConfig[];
+  revenueShare: RevenueShareConfig;
   onSaveTransaction: (orderId: string, updatedOrder: CarServiceOrder, updatedServices: ServiceItem[]) => void;
   onBack: () => void;
   onDeleteOrder?: (orderId: string) => void;
 }
 
 export default function OrderDetailsView({
-  order, services, mechanics, allUsers, currentUser, serviceConfigs, onSaveTransaction, onBack, onDeleteOrder,
+  order, services, mechanics, allUsers, currentUser, serviceConfigs, revenueShare, onSaveTransaction, onBack, onDeleteOrder,
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
   const isAdminLike = isAdminRole(currentUser.role);
+
+  // Edit lock (#6): a car registered by a SERVICE MANAGER cannot be edited by a mechanic.
+  // (A car registered by a mechanic can still be edited by the service manager.)
+  const creatorRole = allUsers.find(u => u.id === order.createdBy)?.role;
+  const mechanicLocked = isMechanic && creatorRole === 'service_manager';
+
+  // Recompute a service's mechanic + service-manager earnings from the share model
+  const recompute = (price: number, source: ClientSource | undefined) =>
+    computeRevenueShares(price, source, revenueShare);
 
   const [draftOrder, setDraftOrder] = useState<CarServiceOrder>({ ...order });
   const [draftServices, setDraftServices] = useState<ServiceItem[]>(() =>
@@ -92,19 +103,20 @@ export default function OrderDetailsView({
       alert('გთხოვთ მიუთითოთ ვალიდური ფასი და აღწერა');
       return;
     }
-    const earn = calculateMechanicEarning(editSrvType, Number(editSrvPriceValue), serviceConfigs, editSrvMechId);
+    const shares = recompute(Number(editSrvPriceValue), draftOrder.clientSource);
     const hasCoMech = showEditCoMechanic && editSrvCoMechId && editSrvCoMechId !== editSrvMechId;
     setDraftServices(prev => prev.map(s => {
       if (s.id !== editingSrvId) return s;
       // Build without undefined — Firestore rejects undefined fields
-      const { coMechanicId: _a, coMechanicEarning: _b, ...base } = s;
+      const { coMechanicId: _a, coMechanicEarning: _b, serviceManagerId: _c, serviceManagerEarning: _d, ...base } = s;
       return {
         ...base,
         serviceType: editSrvType,
         description: editSrvDesc.trim(),
         price: Number(editSrvPriceValue),
         mechanicId: editSrvMechId,
-        mechanicEarning: earn,
+        mechanicEarning: shares.mechanicEarning,
+        ...(draftOrder.serviceManagerId ? { serviceManagerId: draftOrder.serviceManagerId, serviceManagerEarning: shares.serviceManagerEarning } : {}),
         ...(hasCoMech ? { coMechanicId: editSrvCoMechId, coMechanicEarning: Number(editSrvCoMechEarning) || 0 } : {}),
       };
     }));
@@ -118,7 +130,7 @@ export default function OrderDetailsView({
     if (!serviceDescription.trim()) { setServiceError('სამუშაო აღწერა სავალდებულოა'); return; }
     if (!selectedMechanicId) { setServiceError('გთხოვთ აირჩიოთ შემსრულებელი'); return; }
 
-    const earn = calculateMechanicEarning(serviceType, Number(servicePrice), serviceConfigs, selectedMechanicId);
+    const shares = recompute(Number(servicePrice), draftOrder.clientSource);
     const hasCoMech = showCoMechanic && coMechanicId && coMechanicId !== selectedMechanicId;
     const newSrv: ServiceItem = {
       id: `srv-draft-${Date.now()}`,
@@ -127,7 +139,8 @@ export default function OrderDetailsView({
       description: serviceDescription.trim(),
       price: Number(servicePrice),
       mechanicId: selectedMechanicId,
-      mechanicEarning: earn,
+      mechanicEarning: shares.mechanicEarning,
+      ...(draftOrder.serviceManagerId ? { serviceManagerId: draftOrder.serviceManagerId, serviceManagerEarning: shares.serviceManagerEarning } : {}),
       ...(hasCoMech ? { coMechanicId: coMechanicId, coMechanicEarning: Number(coMechanicEarning) || 0 } : {}),
       createdAt: new Date().toISOString(),
     };
@@ -178,6 +191,12 @@ export default function OrderDetailsView({
           )}
         </div>
       </div>
+
+      {mechanicLocked && (
+        <div className="mb-4 p-3 bg-amber-950/30 border border-amber-500/30 text-amber-300 text-xs rounded-xl">
+          ეს მანქანა სერვის მენეჯერმა დაარეგისტრირა — რედაქტირება შეუძლია მხოლოდ მენეჯერს. თქვენ მხოლოდ ნახვა შეგიძლიათ.
+        </div>
+      )}
 
       {/* Desktop 2-column layout */}
       <div className="md:grid md:grid-cols-2 md:gap-6 md:items-start">
@@ -320,6 +339,36 @@ export default function OrderDetailsView({
                 </select>
               </motion.div>
             )}
+
+            {/* Client source — editable in finances, recomputes the split (#3) */}
+            {isAdminLike && (
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                <label className="block text-[10px] text-amber-500 uppercase font-bold">კლიენტი ვინ მოიყვანა (ფინანსები)</label>
+                <div className="grid grid-cols-2 gap-1 bg-slate-900 p-1 rounded-lg border border-slate-800">
+                  {(['mechanic', 'service'] as ClientSource[]).map(src => (
+                    <button key={src} type="button"
+                      onClick={() => {
+                        setDraftOrder(prev => ({ ...prev, clientSource: src }));
+                        setDraftServices(prev => prev.map(s => {
+                          const sh = recompute(s.price, src);
+                          return {
+                            ...s,
+                            mechanicEarning: sh.mechanicEarning,
+                            ...(draftOrder.serviceManagerId ? { serviceManagerEarning: sh.serviceManagerEarning } : {}),
+                          };
+                        }));
+                      }}
+                      className={`py-1.5 text-[10px] font-bold rounded-md transition-all cursor-pointer ${
+                        (draftOrder.clientSource || 'mechanic') === src
+                          ? src === 'mechanic' ? 'bg-cyan-500 text-slate-950' : 'bg-amber-500 text-slate-950'
+                          : 'text-slate-400 hover:text-slate-200'
+                      }`}>
+                      {src === 'mechanic' ? 'ხელოსანმა' : 'სერვისმა'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Assigned Employees (admin can change) */}
@@ -356,7 +405,7 @@ export default function OrderDetailsView({
           )}
 
           {/* Save button — visible on desktop in left column */}
-          <div className="hidden md:block space-y-2">
+          <div className={`space-y-2 ${mechanicLocked ? 'hidden' : 'hidden md:block'}`}>
             {saveError && (
               <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 text-xs rounded-xl">
                 {saveError}
@@ -388,10 +437,12 @@ export default function OrderDetailsView({
                 <h3 className="text-sm font-bold text-slate-100">მომსახურებების სია</h3>
                 <span className="text-[10px] text-slate-500">ცვლილებები ძალაში შევა შენახვისას</span>
               </div>
-              <button onClick={() => setShowAddServiceForm(!showAddServiceForm)}
-                className="flex items-center gap-1 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-1.5 rounded-xl cursor-pointer">
-                <Plus className="w-3.5 h-3.5 stroke-[3]" /> დამატება
-              </button>
+              {!mechanicLocked && (
+                <button onClick={() => setShowAddServiceForm(!showAddServiceForm)}
+                  className="flex items-center gap-1 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-1.5 rounded-xl cursor-pointer">
+                  <Plus className="w-3.5 h-3.5 stroke-[3]" /> დამატება
+                </button>
+              )}
             </div>
 
             <AnimatePresence>
@@ -450,20 +501,19 @@ export default function OrderDetailsView({
                     </div>
                   </div>
 
-                  <div className="bg-slate-900 p-2 border border-slate-800/60 rounded-lg text-[10.5px] text-slate-400">
-                    <span className="font-semibold block mb-0.5 text-slate-300">შემსრულებლის შემოსავალი:</span>
+                  <div className="bg-slate-900 p-2 border border-slate-800/60 rounded-lg text-[10.5px] text-slate-400 space-y-0.5">
+                    <span className="font-semibold block mb-0.5 text-slate-300">
+                      განაწილება ({draftOrder.clientSource === 'service' ? 'სერვისმა მოიყვანა' : 'ხელოსანმა მოიყვანა'}):
+                    </span>
                     {(() => {
-                      const conf = serviceConfigs.find(c => c.id === serviceType);
-                      if (!conf) return <p>50%</p>;
-                      const empR = conf.employeeRewards?.[selectedMechanicId];
-                      const active = empR || conf;
-                      if (active.rewardType === 'flat') {
-                        return <p>ფიქსირებული: <span className="text-emerald-400 font-bold">{(empR || conf).flatReward} ₾</span></p>;
-                      } else {
-                        const pct = (empR || conf).percentageReward;
-                        const earn = Number(servicePrice) > 0 ? (Number(servicePrice) * pct) / 100 : 0;
-                        return <p>{pct}% = <span className="text-emerald-400 font-bold">{earn.toFixed(1)} ₾</span></p>;
-                      }
+                      const sh = recompute(Number(servicePrice) || 0, draftOrder.clientSource);
+                      return (
+                        <>
+                          <p>ხელოსანი: <span className="text-cyan-400 font-bold">{sh.mechanicEarning} ₾</span></p>
+                          {draftOrder.serviceManagerId && <p>სერვის მენეჯერი: <span className="text-amber-400 font-bold">{sh.serviceManagerEarning} ₾</span></p>}
+                          <p>მფლობელი: <span className="text-emerald-400 font-bold">{sh.ownerEarning} ₾</span></p>
+                        </>
+                      );
                     })()}
                   </div>
 
@@ -671,6 +721,14 @@ export default function OrderDetailsView({
                                   </span>
                                 </>
                               )}
+                              {srv.serviceManagerId && srv.serviceManagerEarning !== undefined && (
+                                <>
+                                  <span className="text-slate-600">|</span>
+                                  <span>
+                                    მენეჯერი: <b className="text-amber-400 font-mono">{srv.serviceManagerEarning} ₾</b>
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-1 flex-shrink-0">
@@ -680,10 +738,12 @@ export default function OrderDetailsView({
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            <button onClick={() => { if (confirm('წაიშალოს მომსახურება?')) setDraftServices(prev => prev.filter(s => s.id !== srv.id)); }}
-                              className="p-2 border border-red-500/20 bg-red-950/20 text-red-400 hover:text-red-300 rounded-xl cursor-pointer">
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {!mechanicLocked && (
+                              <button onClick={() => { if (confirm('წაიშალოს მომსახურება?')) setDraftServices(prev => prev.filter(s => s.id !== srv.id)); }}
+                                className="p-2 border border-red-500/20 bg-red-950/20 text-red-400 hover:text-red-300 rounded-xl cursor-pointer">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       )}
@@ -708,7 +768,7 @@ export default function OrderDetailsView({
       </div>
 
       {/* Save Button — mobile only (desktop version is in left column) */}
-      <div className="pt-2 pb-6 md:hidden space-y-2">
+      <div className={`pt-2 pb-6 space-y-2 ${mechanicLocked ? 'hidden' : 'md:hidden'}`}>
         {saveError && (
           <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 text-xs rounded-xl">
             {saveError}
