@@ -38,7 +38,43 @@ export interface CarServiceOrder {
   updatedAt: string;
   assignedEmployeeIds?: string[];   // employees assigned to this order
   assignedServiceType?: string;     // optional service type hint at registration
+  boxId?: string;                   // box this car is handled in
+  serviceManagerId?: string;        // responsible service manager for this order
+  /** Who brought the client: a mechanic found them, or the service brought them. */
+  clientSource?: ClientSource;
 }
+
+/** Who sourced the client — drives the revenue-share profile. */
+export type ClientSource = 'mechanic' | 'service';
+
+/** A physical work bay/box, managed by a service manager, staffed by mechanics. */
+export interface Box {
+  id: string;
+  name: string;
+  serviceManagerId?: string;  // the managing service manager
+  mechanicIds: string[];      // mechanics permanently working in this box
+  createdAt: string;
+}
+
+/**
+ * Global, editable revenue-share configuration.
+ * Percentages of a service's price that go to the mechanic and the service
+ * manager; the owner keeps the remainder. Two profiles depending on who
+ * brought the client.
+ */
+export interface RevenueShareConfig {
+  id: string; // always 'global'
+  mechanicSourced: { mechanicPct: number; serviceManagerPct: number };
+  serviceSourced: { mechanicPct: number; serviceManagerPct: number };
+}
+
+export const DEFAULT_REVENUE_SHARE: RevenueShareConfig = {
+  id: 'global',
+  // Mechanic found the client → mechanic gets more, manager less
+  mechanicSourced: { mechanicPct: 50, serviceManagerPct: 10 },
+  // Service/manager brought the client → manager gets more, mechanic less
+  serviceSourced: { mechanicPct: 40, serviceManagerPct: 20 },
+};
 
 export type ServiceType = string;
 
@@ -71,6 +107,8 @@ export interface ServiceItem {
   mechanicEarning: number;
   coMechanicId?: string;
   coMechanicEarning?: number;
+  serviceManagerId?: string;        // service manager who earns a cut on this service
+  serviceManagerEarning?: number;   // the manager's cut (₾)
   createdAt: string;
 }
 
@@ -270,4 +308,31 @@ export function isOwnerLike(role: Role): boolean {
 /** Shop-floor roles whose access is limited to specific modules (no orders dashboard) */
 export function isLimitedModuleRole(role: Role): boolean {
   return role === 'shop' || role === 'cashier' || role === 'accountant';
+}
+
+/** Boxes managed by a given service manager. */
+export function boxesForManager(boxes: Box[], managerId: string): Box[] {
+  return boxes.filter(b => b.serviceManagerId === managerId);
+}
+
+/** Distinct mechanic ids that belong to a given service manager's boxes. */
+export function mechanicIdsForManager(boxes: Box[], managerId: string): string[] {
+  const ids = new Set<string>();
+  boxes.filter(b => b.serviceManagerId === managerId)
+    .forEach(b => (b.mechanicIds || []).forEach(id => ids.add(id)));
+  return Array.from(ids);
+}
+
+/** Split a service price into mechanic / service-manager / owner shares. */
+export function computeRevenueShares(
+  price: number,
+  source: ClientSource | undefined,
+  cfg: RevenueShareConfig | undefined
+): { mechanicEarning: number; serviceManagerEarning: number; ownerEarning: number } {
+  const c = cfg || DEFAULT_REVENUE_SHARE;
+  const profile = source === 'service' ? c.serviceSourced : c.mechanicSourced;
+  const mechanicEarning = Number(((price * profile.mechanicPct) / 100).toFixed(2));
+  const serviceManagerEarning = Number(((price * profile.serviceManagerPct) / 100).toFixed(2));
+  const ownerEarning = Number((price - mechanicEarning - serviceManagerEarning).toFixed(2));
+  return { mechanicEarning, serviceManagerEarning, ownerEarning };
 }

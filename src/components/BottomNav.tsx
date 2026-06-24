@@ -1,5 +1,5 @@
 import { User, hasModule, isAdminRole, isOwnerLike } from '../types';
-import { LayoutDashboard, History, Users, BarChart3, Wrench, ListTodo, ShoppingBag, Settings, CalendarCheck, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, History, Users, BarChart3, Wrench, ListTodo, ShoppingBag, Settings, CalendarCheck, TrendingUp, Boxes } from 'lucide-react';
 
 interface BottomNavProps {
   currentTab: string;
@@ -20,6 +20,7 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
     if (canManage) {
       tabs.push({ id: 'employees', label: 'პერსონალი', icon: Users });
     }
+    tabs.push({ id: 'boxes', label: 'ბოქსები', icon: Boxes });
     if (hasModule(currentUser, 'reports')) tabs.push({ id: 'reports', label: 'ანგარიში', icon: BarChart3 });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });

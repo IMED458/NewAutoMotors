@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
+  Box, RevenueShareConfig, DEFAULT_REVENUE_SHARE,
   DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
@@ -25,6 +26,7 @@ import MechanicPanelView from './components/MechanicPanelView';
 import StoreView from './components/StoreView';
 import DayClosingSection from './components/DayClosingSection';
 import SettingsView from './components/SettingsView';
+import BoxesView from './components/BoxesView';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -50,6 +52,8 @@ export default function App() {
   const [productSales, setProductSales] = useState<ProductSale[]>([]);
   const [dailyClosings, setDailyClosings] = useState<DailyClosing[]>([]);
   const [carBrands, setCarBrands] = useState<CarBrand[]>([]);
+  const [boxes, setBoxes] = useState<Box[]>([]);
+  const [revenueShare, setRevenueShare] = useState<RevenueShareConfig>(DEFAULT_REVENUE_SHARE);
   const [initialized, setInitialized] = useState(false);
 
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
@@ -77,6 +81,7 @@ export default function App() {
           INITIAL_SERVICES.forEach(s => batch.set(doc(db, 'services', s.id), s));
           DEFAULT_SERVICE_CONFIGS.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
           DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
+          batch.set(doc(db, 'revenueShare', DEFAULT_REVENUE_SHARE.id), DEFAULT_REVENUE_SHARE);
           await batch.commit();
         } else {
           // Always ensure the protected analyst (developer) account exists with the correct role.
@@ -109,6 +114,11 @@ export default function App() {
       onSnapshot(collection(db, 'productSales'), s => setProductSales(s.docs.map(d => d.data() as ProductSale))),
       onSnapshot(collection(db, 'dailyClosings'), s => setDailyClosings(s.docs.map(d => d.data() as DailyClosing))),
       onSnapshot(collection(db, 'carBrands'), s => setCarBrands(s.docs.map(d => d.data() as CarBrand))),
+      onSnapshot(collection(db, 'boxes'), s => setBoxes(s.docs.map(d => d.data() as Box))),
+      onSnapshot(collection(db, 'revenueShare'), s => {
+        const cfg = s.docs.map(d => d.data() as RevenueShareConfig).find(c => c.id === 'global');
+        if (cfg) setRevenueShare(cfg);
+      }),
     ];
     return () => unsubs.forEach(u => u());
   }, [initialized]);
@@ -199,6 +209,18 @@ export default function App() {
     const toDelete = carBrands.filter(cb => !brands.find(b => b.id === cb.id));
     toDelete.forEach(b => batch.delete(doc(db, 'carBrands', b.id)));
     await batch.commit();
+  };
+
+  const handleSaveBoxes = async (next: Box[]) => {
+    const batch = writeBatch(db);
+    next.forEach(b => batch.set(doc(db, 'boxes', b.id), stripUndefined(b)));
+    const toDelete = boxes.filter(b => !next.find(n => n.id === b.id));
+    toDelete.forEach(b => batch.delete(doc(db, 'boxes', b.id)));
+    await batch.commit();
+  };
+
+  const handleSaveRevenueShare = async (cfg: RevenueShareConfig) => {
+    await setDoc(doc(db, 'revenueShare', 'global'), stripUndefined({ ...cfg, id: 'global' }));
   };
 
   const handleAddProduct = async (prod: Omit<Product, 'id' | 'soldQuantity' | 'createdAt'>) => {
@@ -339,6 +361,14 @@ export default function App() {
                       onAddUser={handleAddUser}
                       onUpdateUser={handleUpdateUser}
                       onDeleteUser={handleDeleteUser}
+                    />
+                  )}
+                  {currentTab === 'boxes' && (
+                    <BoxesView
+                      boxes={boxes}
+                      users={users}
+                      currentUser={currentUser}
+                      onSaveBoxes={handleSaveBoxes}
                     />
                   )}
                   {currentTab === 'reports' && (
