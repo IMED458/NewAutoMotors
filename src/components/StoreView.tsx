@@ -25,6 +25,14 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
 
   const [activeTab, setActiveTab] = useState<'pos' | 'products' | 'closing' | 'debts' | 'analytics'>('pos');
 
+  // Role-based visibility (#5): plain shop staff get a simplified store (POS only)
+  const storeRole = currentUser?.role;
+  const isStorePrivileged = storeRole === 'super_admin' || storeRole === 'general_manager' || storeRole === 'developer';
+  const showProductsTab = isStorePrivileged;
+  const showClosingTab = isStorePrivileged || storeRole === 'cashier';
+  const showDebtsTab = isStorePrivileged;
+  const showAnalyticsTab = isStorePrivileged;
+
   // Load state on mount
   useEffect(() => {
     // Products
@@ -317,49 +325,57 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
             სალარო / POS
           </button>
 
-          <button
-            id="store-tab-inventory"
-            onClick={() => setActiveTab('products')}
-            className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
-              activeTab === 'products' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
-            }`}
-          >
-            <Package className="w-3.5 h-3.5" />
-            პროდუქტები & მარაგი
-          </button>
+          {showProductsTab && (
+            <button
+              id="store-tab-inventory"
+              onClick={() => setActiveTab('products')}
+              className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
+                activeTab === 'products' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              პროდუქტები & მარაგი
+            </button>
+          )}
 
-          <button
-            id="store-tab-closing"
-            onClick={() => setActiveTab('closing')}
-            className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
-              activeTab === 'closing' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            დღის დახურვა
-          </button>
+          {showClosingTab && (
+            <button
+              id="store-tab-closing"
+              onClick={() => setActiveTab('closing')}
+              className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
+                activeTab === 'closing' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              დღის დახურვა
+            </button>
+          )}
 
-          <button
-            id="store-tab-debts"
-            onClick={() => setActiveTab('debts')}
-            className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
-              activeTab === 'debts' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
-            }`}
-          >
-            <Landmark className="w-3.5 h-3.5" />
-            დავალიანება
-          </button>
+          {showDebtsTab && (
+            <button
+              id="store-tab-debts"
+              onClick={() => setActiveTab('debts')}
+              className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
+                activeTab === 'debts' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              დავალიანება
+            </button>
+          )}
 
-          <button
-            id="store-tab-analytics"
-            onClick={() => setActiveTab('analytics')}
-            className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
-              activeTab === 'analytics' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
-            }`}
-          >
-            <BarChart3 className="w-3.5 h-3.5" />
-            ანგარიშები
-          </button>
+          {showAnalyticsTab && (
+            <button
+              id="store-tab-analytics"
+              onClick={() => setActiveTab('analytics')}
+              className={`flex items-center gap-1 text-[11px] font-bold px-3 py-2 rounded-lg transition-all cursor-pointer ${
+                activeTab === 'analytics' ? 'bg-amber-500 text-slate-950 shadow' : 'text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              ანგარიშები
+            </button>
+          )}
         </div>
       </div>
 

@@ -3,7 +3,7 @@ import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
   Box, RevenueShareConfig, DEFAULT_REVENUE_SHARE,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike, isLimitedModuleRole,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { exportAllToExcel } from './utils/excelExport';
@@ -135,6 +135,10 @@ export default function App() {
       localStorage.setItem('auto_service_current_user', JSON.stringify(currentUser));
       if (isAdminRole(currentUser.role)) {
         setCurrentTab('dashboard');
+      } else if (currentUser.role === 'accountant') {
+        setCurrentTab('reports');
+      } else if (isLimitedModuleRole(currentUser.role)) {
+        setCurrentTab('shop');
       } else {
         setCurrentTab('all-orders');
       }
@@ -468,6 +472,32 @@ export default function App() {
                       dailyClosings={dailyClosings}
                       currentUser={currentUser}
                       onConfirmCloseDay={handleConfirmCloseDay}
+                    />
+                  )}
+                </>
+              )}
+              {isLimitedModuleRole(currentUser.role) && (
+                <>
+                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && (
+                    <StoreView currentUser={currentUser} orders={orders} services={services} />
+                  )}
+                  {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && (
+                    <DayClosingSection
+                      orders={orders}
+                      services={services}
+                      productSales={productSales}
+                      dailyClosings={dailyClosings}
+                      currentUser={currentUser}
+                      onConfirmCloseDay={handleConfirmCloseDay}
+                    />
+                  )}
+                  {currentTab === 'reports' && hasModule(currentUser, 'reports') && (
+                    <ReportsView
+                      orders={orders}
+                      services={services}
+                      mechanics={executorsList}
+                      allUsers={users}
+                      onExportExcel={handleExportExcel}
                     />
                   )}
                 </>

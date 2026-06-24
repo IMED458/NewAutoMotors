@@ -422,8 +422,7 @@ export default function POSSection({ products, orders, onAddSale, currentUser }:
                   <input
                     id="pos-new-client-name"
                     type="text"
-                    required
-                    placeholder="კლიენტის სახელი..."
+                    placeholder="კლიენტის სახელი (არჩევითი)..."
                     value={newClientName}
                     onChange={(e) => setNewClientName(e.target.value)}
                     className="bg-slate-950 border border-slate-850 rounded px-2 py-1 text-[11px] text-slate-200 placeholder-slate-700"
