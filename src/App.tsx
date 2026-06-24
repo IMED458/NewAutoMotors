@@ -488,6 +488,17 @@ export default function App() {
               )}
               {isLimitedModuleRole(currentUser.role) && (
                 <>
+                  {currentUser.role === 'accountant' && currentTab === 'history' && (
+                    <HistoryView
+                      orders={orders}
+                      services={services}
+                      mechanics={executorsList}
+                      serviceConfigs={serviceConfigs}
+                      currentUser={currentUser}
+                      allUsers={users}
+                      onSelectOrder={handleSelectOrder}
+                    />
+                  )}
                   {currentTab === 'shop' && hasModule(currentUser, 'shop') && (
                     <StoreView currentUser={currentUser} orders={orders} services={services} />
                   )}

@@ -27,7 +27,7 @@ export default function OrderDetailsView({
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
   const isAdminLike = isAdminRole(currentUser.role);
-  const canGenerateInvoice = ['super_admin', 'general_manager', 'service_manager', 'developer'].includes(currentUser.role);
+  const canGenerateInvoice = ['super_admin', 'general_manager', 'service_manager', 'accountant', 'developer'].includes(currentUser.role);
 
   // Edit lock (#6): a car registered by a SERVICE MANAGER cannot be edited by a mechanic.
   // (A car registered by a mechanic can still be edited by the service manager.)

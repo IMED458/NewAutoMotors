@@ -36,6 +36,7 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
   } else {
     // Limited-module roles: shop / cashier / accountant — only their modules
+    if (role === 'accountant') tabs.push({ id: 'history', label: 'ინვოისები', icon: History });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
     if (hasModule(currentUser, 'reports')) tabs.push({ id: 'reports', label: 'ანგარიში', icon: BarChart3 });
