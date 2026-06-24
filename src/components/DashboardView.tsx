@@ -121,6 +121,14 @@ export default function DashboardView({
 }: DashboardViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all_active');
+  const managedBoxes = new Set(boxes.filter(box => box.serviceManagerId === currentUser.id).map(box => box.id));
+  const managedMechanics = new Set(boxes
+    .filter(box => box.serviceManagerId === currentUser.id)
+    .flatMap(box => box.mechanicIds || []));
+  const isInManagersScope = (order: CarServiceOrder) =>
+    order.serviceManagerId === currentUser.id ||
+    (!!order.boxId && managedBoxes.has(order.boxId)) ||
+    (order.assignedEmployeeIds || []).some(id => managedMechanics.has(id));
 
   // "My Tasks": orders explicitly assigned to current user that are not completed
   const myTasksCount = orders.filter(o =>
@@ -128,6 +136,9 @@ export default function DashboardView({
   ).length;
 
   const filteredOrders = orders.filter((order) => {
+    // "All" is an intentional cross-box overview for service managers.
+    // Every operational status view remains limited to their own boxes.
+    if (currentUser.role === 'service_manager' && selectedStatusFilter !== 'all' && !isInManagersScope(order)) return false;
     const q = searchQuery.toLowerCase().trim();
     const plateQ = formatPlate(q.replace(/[^A-Za-z0-9]/g, '')).toLowerCase();
     const matchesSearch =
