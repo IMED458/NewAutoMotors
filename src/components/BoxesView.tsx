@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, User, ROLE_LABELS, isOwnerLike } from '../types';
-import { Boxes, Plus, Trash2, Edit, Save, X, Wrench, ShieldCheck, UserPlus } from 'lucide-react';
+import { Box, User, isOwnerLike } from '../types';
+import { Boxes, Plus, Trash2, Edit, Save, X, Wrench, ShieldCheck, UserPlus, Filter } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface BoxesViewProps {
@@ -24,6 +24,8 @@ export default function BoxesView({ boxes, users, currentUser, onSaveBoxes }: Bo
   const [editName, setEditName] = useState('');
   const [editManager, setEditManager] = useState('');
   const [editMechs, setEditMechs] = useState<string[]>([]);
+  const [mechanicToAdd, setMechanicToAdd] = useState('');
+  const [boxFilter, setBoxFilter] = useState<'all' | 'mine'>('all');
 
   const userName = (id?: string) => {
     if (!id) return '—';
@@ -49,6 +51,7 @@ export default function BoxesView({ boxes, users, currentUser, onSaveBoxes }: Bo
     setEditName(b.name);
     setEditManager(b.serviceManagerId || '');
     setEditMechs(b.mechanicIds || []);
+    setMechanicToAdd('');
   };
 
   const saveEdit = () => {
@@ -62,13 +65,19 @@ export default function BoxesView({ boxes, users, currentUser, onSaveBoxes }: Bo
     if (confirm('ნამდვილად წაიშალოს ეს ბოქსი?')) onSaveBoxes(boxes.filter(b => b.id !== id));
   };
 
-  const toggleMech = (id: string) =>
-    setEditMechs(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const addMechanic = () => {
+    if (!mechanicToAdd) return;
+    setEditMechs(prev => prev.includes(mechanicToAdd) ? prev : [...prev, mechanicToAdd]);
+    setMechanicToAdd('');
+  };
 
-  // Service managers see their own boxes first
+  // Service managers can inspect every box; their own boxes stay first when all are shown.
   const sortedBoxes = isServiceManager
     ? [...boxes].sort((a, b) => Number(b.serviceManagerId === currentUser.id) - Number(a.serviceManagerId === currentUser.id))
     : boxes;
+  const visibleBoxes = isServiceManager && boxFilter === 'mine'
+    ? sortedBoxes.filter(box => box.serviceManagerId === currentUser.id)
+    : sortedBoxes;
 
   return (
     <div className="max-w-lg mx-auto p-4 pb-28 bg-slate-950 text-slate-100 font-sans md:max-w-3xl">
@@ -88,7 +97,14 @@ export default function BoxesView({ boxes, users, currentUser, onSaveBoxes }: Bo
       </div>
 
       {isServiceManager && (
-        <p className="text-[11px] text-slate-500 mb-3">თქვენი ბოქსები ზემოთაა მონიშნული. დანარჩენი ბოქსები მხოლოდ სანახავადაა.</p>
+        <div className="mb-4 bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[11px] text-slate-400">ყველა სერვის მენეჯერი ხედავს ყველა ბოქსს. „ჩემი ბოქსები“ მხოლოდ თქვენს პასუხისმგებლობაში არსებულებს აჩვენებს.</p>
+          <label className="flex items-center gap-2 text-xs text-slate-400 whitespace-nowrap"><Filter className="w-3.5 h-3.5 text-amber-400" />
+            <select value={boxFilter} onChange={e => setBoxFilter(e.target.value as 'all' | 'mine')} className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-200">
+              <option value="all">ყველა ბოქსი</option><option value="mine">ჩემი ბოქსები</option>
+            </select>
+          </label>
+        </div>
       )}
 
       {showAdd && canManage && (
@@ -103,12 +119,12 @@ export default function BoxesView({ boxes, users, currentUser, onSaveBoxes }: Bo
       )}
 
       <div className="space-y-3">
-        {sortedBoxes.length === 0 && (
+        {visibleBoxes.length === 0 && (
           <div className="p-8 text-center text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800 text-xs">
             ბოქსები ჯერ არ არის დამატებული.
           </div>
         )}
-        {sortedBoxes.map(b => {
+        {visibleBoxes.map(b => {
           const isMine = isServiceManager && b.serviceManagerId === currentUser.id;
           const isEditing = editingId === b.id;
           return (
@@ -130,18 +146,16 @@ export default function BoxesView({ boxes, users, currentUser, onSaveBoxes }: Bo
                   </div>
                   <div>
                     <label className="block text-[10px] text-slate-500 uppercase font-bold mb-1">ხელოსნები ({editMechs.length})</label>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {mechanics.map(m => {
-                        const on = editMechs.includes(m.id);
-                        return (
-                          <button key={m.id} type="button" onClick={() => toggleMech(m.id)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-left text-xs transition-all cursor-pointer ${on ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'bg-slate-950 border-slate-800 text-slate-500'}`}>
-                            <div className={`w-1.5 h-1.5 rounded-full ${on ? 'bg-cyan-400' : 'bg-slate-700'}`} />
-                            <span className="truncate font-semibold">{m.firstName} {m.lastName}</span>
-                          </button>
-                        );
-                      })}
-                      {mechanics.length === 0 && <span className="text-[11px] text-slate-600 col-span-2">ხელოსნები ჯერ არ არის.</span>}
+                    <div className="flex gap-2">
+                      <select value={mechanicToAdd} onChange={e => setMechanicToAdd(e.target.value)} className="min-w-0 flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200">
+                        <option value="">— აირჩიეთ ხელოსანი —</option>
+                        {mechanics.filter(m => !editMechs.includes(m.id)).map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
+                      </select>
+                      <button type="button" onClick={addMechanic} disabled={!mechanicToAdd} className="px-3 py-2 rounded-lg bg-cyan-500 text-slate-950 font-black text-xs disabled:opacity-40"><UserPlus className="w-4 h-4" /></button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {editMechs.map(id => <span key={id} className="inline-flex items-center gap-1 bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 px-2 py-1 rounded-lg text-xs font-semibold">{userName(id)}<button type="button" onClick={() => setEditMechs(prev => prev.filter(item => item !== id))} aria-label={`${userName(id)} წაშლა`} className="text-cyan-200 hover:text-white"><X className="w-3 h-3" /></button></span>)}
+                      {editMechs.length === 0 && <span className="text-[11px] text-slate-600">არცერთი ხელოსანი არ არის დამატებული.</span>}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
