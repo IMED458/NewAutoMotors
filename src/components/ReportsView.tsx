@@ -31,11 +31,12 @@ interface ReportsViewProps {
   services: ServiceItem[];
   mechanics: User[];
   allUsers: User[];
+  onExportExcel?: () => void;
 }
 
 type PeriodType = 'week' | 'month' | 'year' | 'all';
 
-export default function ReportsView({ orders, services, mechanics, allUsers }: ReportsViewProps) {
+export default function ReportsView({ orders, services, mechanics, allUsers, onExportExcel }: ReportsViewProps) {
   const [activePeriod, setActivePeriod] = useState<PeriodType>('all');
 
   // Helper date calculators
@@ -168,9 +169,9 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     });
   });
 
-  // Filter out records that are empty only if they are not system default admins like Zviad
+  // Keep only records that actually received money
   const activePaidToShares = Object.values(paidToSharesRecords).filter(
-    (item) => item.name === 'ზვიადი' || item.totalReceived > 0
+    (item) => item.totalReceived > 0
   );
 
   // Dynamic label for categories
@@ -241,15 +242,27 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
           ფინანსური რეპორტი
         </h2>
 
-        {/* Export CSV button */}
-        <button
-          id="export-csv-btn"
-          onClick={handleExportCSV}
-          className="flex items-center justify-center gap-1.5 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg shadow-amber-500/10 active:scale-95 transition-all text-center w-full sm:w-auto"
-        >
-          <Download className="w-4 h-4" />
-          ექსპორტი (CSV)
-        </button>
+        {/* Export buttons */}
+        <div className="flex gap-2 w-full sm:w-auto">
+          <button
+            id="export-csv-btn"
+            onClick={handleExportCSV}
+            className="flex items-center justify-center gap-1.5 text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 font-bold px-3.5 py-2.5 rounded-xl cursor-pointer active:scale-95 transition-all text-center flex-1 sm:flex-none"
+          >
+            <Download className="w-4 h-4" />
+            CSV
+          </button>
+          {onExportExcel && (
+            <button
+              id="export-excel-btn"
+              onClick={onExportExcel}
+              className="flex items-center justify-center gap-1.5 text-xs text-slate-950 bg-emerald-500 hover:bg-emerald-600 font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg shadow-emerald-500/10 active:scale-95 transition-all text-center flex-1 sm:flex-none"
+            >
+              <Download className="w-4 h-4" />
+              Excel (ყველაფერი)
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Modern Horizontal Period Selector Buttons */}

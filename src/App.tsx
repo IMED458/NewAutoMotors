@@ -5,6 +5,7 @@ import {
   DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
+import { exportAllToExcel } from './utils/excelExport';
 import { db } from './firebase';
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc,
@@ -243,6 +244,10 @@ export default function App() {
     await setDoc(doc(db, 'dailyClosings', id), stripUndefined(c));
   };
 
+  const handleExportExcel = () => {
+    exportAllToExcel({ users, orders, services, products, productSales, dailyClosings, serviceConfigs });
+  };
+
   const handleDeleteOrder = async (orderId: string) => {
     const batch = writeBatch(db);
     batch.delete(doc(db, 'orders', orderId));
@@ -342,6 +347,7 @@ export default function App() {
                       services={services}
                       mechanics={executorsList}
                       allUsers={users}
+                      onExportExcel={handleExportExcel}
                     />
                   )}
                   {currentTab === 'shop' && hasModule(currentUser, 'shop') && (
