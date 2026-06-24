@@ -8,8 +8,34 @@ select {
 }
 
 @media print {
+  @page { size: A4; margin: 0; }
   body * { visibility: hidden !important; }
   #print-invoice, #print-invoice *, #print-day-closing, #print-day-closing * { visibility: visible !important; }
   #print-invoice, #print-day-closing { position: absolute; inset: 0; width: 100%; }
+  #print-invoice {
+    box-sizing: border-box;
+    min-height: 297mm;
+    padding: 13mm 15mm !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  #print-invoice .invoice-header {
+    background: linear-gradient(120deg, #0f172a, #1e293b 68%, #b45309) !important;
+    color: #fff !important;
+    border: 0 !important;
+    border-radius: 10px !important;
+    padding: 7mm !important;
+  }
+  #print-invoice .invoice-header .text-slate-600,
+  #print-invoice .invoice-header .text-slate-500 { color: #dbeafe !important; }
+  #print-invoice .invoice-header .bg-slate-950 { background: rgba(255,255,255,.14) !important; }
+  #print-invoice .invoice-card { background: #f8fafc !important; border-color: #cbd5e1 !important; }
+  #print-invoice .invoice-vehicle { border-color: #cbd5e1 !important; }
+  #print-invoice .invoice-vehicle > div:first-child { background: #fef3c7 !important; color: #78350f !important; }
+  #print-invoice .invoice-services thead { background: #0f172a !important; }
+  #print-invoice .invoice-services tbody tr:nth-child(even) { background: #f8fafc !important; }
+  #print-invoice .invoice-total { background: #fffbeb !important; border-color: #d97706 !important; }
+  #print-invoice footer { border-color: #94a3b8 !important; }
   .print\:hidden { display: none !important; }
 }
