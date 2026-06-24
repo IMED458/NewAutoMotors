@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, Box, isOwnerLike, boxesForManager, mechanicIdsForManager } from '../types';
+import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, Box, RevenueShareConfig, computeRevenueShares, isOwnerLike, boxesForManager, mechanicIdsForManager } from '../types';
 import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users, Boxes, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -15,6 +15,7 @@ interface MechanicPanelViewProps {
   allUsers: User[];
   serviceConfigs: ServiceTypeConfig[];
   boxes: Box[];
+  revenueShare: RevenueShareConfig;
   onSelectOrder: (id: string) => void;
 }
 
@@ -459,23 +460,36 @@ function EmployeeEarningsView({
 // ──────────────────────────────────────────────
 // Service manager panel — own boxes, own mechanics, own & their wages
 // ──────────────────────────────────────────────
-function ServiceManagerPanelView({ services, currentUser, allUsers, boxes }: MechanicPanelViewProps) {
+function ServiceManagerPanelView({ orders, services, currentUser, allUsers, boxes, revenueShare }: MechanicPanelViewProps) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
   const myBoxes = boxesForManager(boxes, currentUser.id);
   const myMechanicIds = mechanicIdsForManager(boxes, currentUser.id);
 
-  const inRange = (createdAt: string) => {
-    if (startDate && createdAt.slice(0, 10) < startDate) return false;
-    if (endDate && createdAt.slice(0, 10) > endDate) return false;
+  const orderById = new Map(orders.map(order => [order.id, order]));
+  const myBoxIds = new Set(myBoxes.map(box => box.id));
+  const inRange = (service: ServiceItem) => {
+    const date = orderById.get(service.orderId)?.date || service.createdAt.slice(0, 10);
+    if (startDate && date < startDate) return false;
+    if (endDate && date > endDate) return false;
     return true;
   };
-  const filtered = services.filter(s => inRange(s.createdAt));
+  const managesService = (service: ServiceItem) => {
+    const order = orderById.get(service.orderId);
+    return service.serviceManagerId === currentUser.id || order?.serviceManagerId === currentUser.id || (!!order?.boxId && myBoxIds.has(order.boxId)) ||
+      (order?.assignedEmployeeIds || []).some(id => myMechanicIds.includes(id));
+  };
+  const filtered = services.filter(service => managesService(service) && inRange(service));
+  const managerShareFor = (service: ServiceItem) => {
+    const order = orderById.get(service.orderId);
+    if (service.serviceManagerId === currentUser.id && service.serviceManagerEarning !== undefined) return service.serviceManagerEarning;
+    return computeRevenueShares(service.price, order?.clientSource, revenueShare).serviceManagerEarning;
+  };
 
-  const myEarnings = filtered
-    .filter(s => s.serviceManagerId === currentUser.id)
-    .reduce((sum, s) => sum + (s.serviceManagerEarning || 0), 0);
+  const myEarnings = filtered.reduce((sum, service) => sum + managerShareFor(service), 0);
+  const paidManagerEarnings = filtered.reduce((sum, service) => orderById.get(service.orderId)?.paymentStatus === 'paid' ? sum + managerShareFor(service) : sum, 0);
+  const managerTurnover = filtered.reduce((sum, service) => sum + service.price, 0);
 
   const mechWage = (id: string) => filtered.reduce((sum, s) => {
     let w = 0;
@@ -520,11 +534,13 @@ function ServiceManagerPanelView({ services, currentUser, allUsers, boxes }: Mec
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-5">
+      <div className="grid grid-cols-2 gap-3 mb-5 md:grid-cols-4">
         <div className="bg-slate-900 border border-amber-500/20 p-3.5 rounded-xl">
-          <span className="text-[10px] text-slate-400 font-bold uppercase block">ჩემი ანაზღაურება</span>
+          <span className="text-[10px] text-slate-400 font-bold uppercase block">გამოანგარიშებული ხელფასი</span>
           <div className="text-lg font-black font-mono mt-1 text-amber-400">{myEarnings.toLocaleString()} ₾</div>
         </div>
+        <div className="bg-slate-900 border border-emerald-500/20 p-3.5 rounded-xl"><span className="text-[10px] text-slate-400 font-bold uppercase block">გადახდილი წილი</span><div className="text-lg font-black font-mono mt-1 text-emerald-400">{paidManagerEarnings.toLocaleString()} ₾</div></div>
+        <div className="bg-slate-900 border border-cyan-500/20 p-3.5 rounded-xl"><span className="text-[10px] text-slate-400 font-bold uppercase block">ჩემი ბოქსების ბრუნვა</span><div className="text-lg font-black font-mono mt-1 text-cyan-400">{managerTurnover.toLocaleString()} ₾</div></div>
         <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl">
           <span className="text-[10px] text-slate-400 font-bold uppercase block flex items-center gap-1"><Boxes className="w-3 h-3" /> ბოქსები</span>
           <div className="text-lg font-black font-mono mt-1 text-slate-200">{myBoxes.length}</div>
@@ -533,6 +549,12 @@ function ServiceManagerPanelView({ services, currentUser, allUsers, boxes }: Mec
           <span className="text-[10px] text-slate-400 font-bold uppercase block flex items-center gap-1"><Wrench className="w-3 h-3" /> ხელოსნები</span>
           <div className="text-lg font-black font-mono mt-1 text-slate-200">{myMechanicIds.length}</div>
         </div>
+      </div>
+
+      <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-4 mb-5 text-xs">
+        <div className="flex justify-between"><span className="text-slate-400">დარიცხული მენეჯერის წილი</span><b className="font-mono text-amber-400">{myEarnings.toLocaleString()} ₾</b></div>
+        <div className="flex justify-between mt-2"><span className="text-slate-400">გადახდილი შეკვეთებიდან</span><b className="font-mono text-emerald-400">{paidManagerEarnings.toLocaleString()} ₾</b></div>
+        <div className="flex justify-between mt-2 pt-2 border-t border-slate-800"><span className="text-slate-300 font-bold">გადასახდელი / გადაუხდელი შეკვეთების წილი</span><b className="font-mono text-rose-400">{(myEarnings - paidManagerEarnings).toLocaleString()} ₾</b></div>
       </div>
 
       <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5 flex items-center gap-1.5">
@@ -586,6 +608,7 @@ export default function MechanicPanelView(props: MechanicPanelViewProps) {
         allUsers={props.allUsers}
         serviceConfigs={props.serviceConfigs}
         boxes={props.boxes}
+        revenueShare={props.revenueShare}
         onSelectOrder={props.onSelectOrder}
       />
     );

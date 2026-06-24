@@ -430,6 +430,7 @@ export default function App() {
                       allUsers={users}
                       serviceConfigs={serviceConfigs}
                       boxes={boxes}
+                      revenueShare={revenueShare}
                       onSelectOrder={handleSelectOrder}
                     />
                   )}
@@ -445,6 +446,7 @@ export default function App() {
                       allUsers={users}
                       serviceConfigs={serviceConfigs}
                       boxes={boxes}
+                      revenueShare={revenueShare}
                       onSelectOrder={handleSelectOrder}
                     />
                   )}
