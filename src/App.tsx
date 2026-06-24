@@ -349,16 +349,17 @@ export default function App() {
                 <>
                   {currentTab === 'dashboard' && (
                     <DashboardView
-                      orders={visibleOrders}
+                      orders={orders}
                       currentUser={currentUser}
                       allUsers={users}
+                      boxes={boxes}
                       onSelectOrder={handleSelectOrder}
                       onOpenAddOrder={handleOpenAddOrder}
                     />
                   )}
                   {currentTab === 'history' && (
                     <HistoryView
-                      orders={visibleOrders}
+                      orders={orders}
                       services={services}
                       mechanics={executorsList}
                       serviceConfigs={serviceConfigs}
@@ -452,6 +453,7 @@ export default function App() {
                       orders={orders}
                       currentUser={currentUser}
                       allUsers={users}
+                      boxes={boxes}
                       onSelectOrder={handleSelectOrder}
                       onOpenAddOrder={handleOpenAddOrder}
                     />

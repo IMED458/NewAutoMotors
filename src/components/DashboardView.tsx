@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole } from '../types';
+import { Box, CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole } from '../types';
 import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -14,6 +14,7 @@ interface DashboardViewProps {
   orders: CarServiceOrder[];
   currentUser: User;
   allUsers: User[];
+  boxes?: Box[];
   onSelectOrder: (id: string) => void;
   onOpenAddOrder: () => void;
 }
@@ -22,11 +23,12 @@ interface OrderCardProps {
   key?: string;
   order: CarServiceOrder;
   allUsers: User[];
+  boxes?: Box[];
   onSelectOrder: (id: string) => void;
   highlight?: boolean;
 }
 
-function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps) {
+function OrderCard({ order, allUsers, boxes = [], onSelectOrder, highlight }: OrderCardProps) {
   const statusStyle =
     order.status === 'new'
       ? { bg: 'bg-amber-950/50', border: 'border-amber-500/30', text: 'text-amber-400', bar: 'bg-amber-500' }
@@ -42,6 +44,7 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
   const assignees = (order.assignedEmployeeIds || [])
     .map(id => allUsers.find(u => u.id === id))
     .filter(Boolean) as User[];
+  const boxName = boxes.find(box => box.id === order.boxId)?.name;
 
   return (
     <motion.div
@@ -73,6 +76,7 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
           <Calendar className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
           <span>{order.date}</span>
         </div>
+        {boxName && <div className="flex items-center gap-1.5"><Car className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" /><span className="text-amber-300 font-semibold">{boxName}</span></div>}
       </div>
 
       <div className="bg-slate-950 rounded-xl p-2.5 mx-1 border border-slate-800/60 mb-3">
@@ -111,6 +115,7 @@ export default function DashboardView({
   orders,
   currentUser,
   allUsers,
+  boxes = [],
   onSelectOrder,
   onOpenAddOrder,
 }: DashboardViewProps) {
@@ -253,6 +258,7 @@ export default function DashboardView({
               key={order.id}
               order={order}
               allUsers={allUsers}
+              boxes={boxes}
               onSelectOrder={onSelectOrder}
               highlight={selectedStatusFilter === 'my-tasks'}
             />
