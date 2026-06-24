@@ -22,8 +22,9 @@ interface EmployeesViewProps {
 }
 
 export default function EmployeesView({ users, currentUser, onAddUser, onUpdateUser, onDeleteUser }: EmployeesViewProps) {
-  // Owner & general manager have full personnel-management permissions
-  const isOwner = isOwnerLike(currentUser.role);
+  // Owner & general manager have full personnel-management permissions.
+  // The analyst (developer) can also manage users — needed to bootstrap the first owner.
+  const isOwner = isOwnerLike(currentUser.role) || currentUser.role === 'developer';
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [firstName, setFirstName] = useState('');

@@ -11,17 +11,20 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
   const { role } = currentUser;
   const tabs: { id: string; label: string; icon: any }[] = [];
 
+  // The analyst (developer) can manage the whole program (incl. bootstrapping the owner)
+  const canManage = isOwnerLike(role) || role === 'developer';
+
   if (isAdminRole(role)) {
     tabs.push({ id: 'dashboard', label: 'დაფა', icon: LayoutDashboard });
     tabs.push({ id: 'history', label: 'ისტორია', icon: History });
-    if (isOwnerLike(role)) {
+    if (canManage) {
       tabs.push({ id: 'employees', label: 'პერსონალი', icon: Users });
     }
     if (hasModule(currentUser, 'reports')) tabs.push({ id: 'reports', label: 'ანგარიში', icon: BarChart3 });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
     tabs.push({ id: 'earnings', label: 'ჩემი', icon: TrendingUp });
-    if (isOwnerLike(role)) {
+    if (canManage) {
       tabs.push({ id: 'settings', label: 'პარამეტრი', icon: Settings });
     }
   } else {

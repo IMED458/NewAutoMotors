@@ -363,7 +363,7 @@ export default function App() {
                       onConfirmCloseDay={handleConfirmCloseDay}
                     />
                   )}
-                  {currentTab === 'settings' && isOwnerLike(currentUser.role) && (
+                  {currentTab === 'settings' && (isOwnerLike(currentUser.role) || currentUser.role === 'developer') && (
                     <SettingsView
                       serviceConfigs={serviceConfigs}
                       carBrands={carBrands}
