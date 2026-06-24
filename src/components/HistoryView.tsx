@@ -35,7 +35,6 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
   const [filterSource, setFilterSource] = useState<'all' | 'mine' | 'manager'>('all');
 
   const roleOf = (userId: string) => allUsers.find(u => u.id === userId)?.role;
-  const isMechanic = currentUser.role === 'mechanic';
 
   const resetFilters = () => {
     setFilterCarPlate('');
@@ -60,7 +59,7 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
       if (filterWorkStatus === 'ongoing' && order.status === 'completed') return false;
     }
     if (filterSource === 'mine' && order.createdBy !== currentUser.id) return false;
-    if (filterSource === 'manager' && roleOf(order.createdBy) !== 'service_manager') return false;
+    if (filterSource === 'manager' && !['service_manager', 'general_manager', 'super_admin'].includes(roleOf(order.createdBy) || '')) return false;
     const orderSrvList = services.filter(s => s.orderId === order.id);
     if (filterMechanicId && !orderSrvList.some(s => s.mechanicId === filterMechanicId || s.coMechanicId === filterMechanicId)) return false;
     if (filterServiceType && !orderSrvList.some(s => s.serviceType === filterServiceType)) return false;
@@ -85,9 +84,8 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
         </button>
       </div>
 
-      {/* Source filter (#11): mine / manager-added */}
-      {isMechanic && (
-        <div className="flex gap-1.5 mb-4">
+      {/* Source filter: available to every role, so work origin stays auditable. */}
+      <div className="flex gap-1.5 mb-4">
           {([
             { id: 'all', label: 'ყველა' },
             { id: 'mine', label: 'ჩემი დამატებული' },
@@ -102,8 +100,7 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
               {opt.label}
             </button>
           ))}
-        </div>
-      )}
+      </div>
 
       {/* Filters */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 shadow-lg space-y-3">

@@ -1,464 +1,80 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { useState } from 'react';
-import {
-  CarServiceOrder,
-  User,
-  ServiceItem,
-  ORDER_STATUS_LABELS,
-  PAYMENT_STATUS_LABELS,
-} from '../types';
-import {
-  BarChart3,
-  TrendingUp,
-  DollarSign,
-  Download,
-  Users,
-  Award,
-  CalendarDays,
-  Calendar,
-  Wallet,
-  Clock,
-  ArrowRight,
-} from 'lucide-react';
-import { motion } from 'motion/react';
+import { useMemo, useState } from 'react';
+import { BarChart3, CalendarDays, Download, Store, Users, Wallet } from 'lucide-react';
+import { Box, CarServiceOrder, ProductSale, ServiceItem, User, mechanicIdsForManager } from '../types';
 
 interface ReportsViewProps {
   orders: CarServiceOrder[];
   services: ServiceItem[];
-  mechanics: User[];
+  productSales: ProductSale[];
   allUsers: User[];
+  boxes: Box[];
+  currentUser: User;
   onExportExcel?: () => void;
 }
 
-type PeriodType = 'week' | 'month' | 'year' | 'all';
+type Period = 'day' | 'week' | 'month' | 'year' | 'all';
+const money = (value: number) => `${value.toLocaleString('ka-GE', { maximumFractionDigits: 2 })} ₾`;
 
-export default function ReportsView({ orders, services, mechanics, allUsers, onExportExcel }: ReportsViewProps) {
-  const [activePeriod, setActivePeriod] = useState<PeriodType>('all');
+function inPeriod(date: string, period: Period, selectedDate: string) {
+  if (period === 'all') return true;
+  const value = new Date(`${date}T00:00:00`);
+  const anchor = new Date(`${selectedDate}T00:00:00`);
+  if (Number.isNaN(value.getTime())) return false;
+  const start = new Date(anchor);
+  if (period === 'day') return date === selectedDate;
+  if (period === 'week') start.setDate(start.getDate() - 6);
+  if (period === 'month') start.setMonth(start.getMonth() - 1);
+  if (period === 'year') start.setFullYear(start.getFullYear() - 1);
+  return value >= start && value <= anchor;
+}
 
-  // Helper date calculators
-  const filterOrdersByPeriod = (orderList: CarServiceOrder[], period: PeriodType) => {
-    const now = new Date();
-    
-    // Set hours to zero for accurate day calculations
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+export default function ReportsView({ orders, services, productSales, allUsers, boxes, currentUser, onExportExcel }: ReportsViewProps) {
+  const [period, setPeriod] = useState<Period>('month');
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const isServiceManager = currentUser.role === 'service_manager';
+  const managedMechanics = useMemo(() => new Set(mechanicIdsForManager(boxes, currentUser.id)), [boxes, currentUser.id]);
+  const managedBoxIds = useMemo(() => new Set(boxes.filter(box => box.serviceManagerId === currentUser.id).map(box => box.id)), [boxes, currentUser.id]);
 
-    return orderList.filter((order) => {
-      const orderDate = new Date(order.date);
-      if (isNaN(orderDate.getTime())) return true; // Fallback for invalid dates
-      
-      const diffTime = today.getTime() - orderDate.getTime();
-      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+  // A service manager never gets another box's figures. Accountant and owner-like roles see the complete ledger.
+  const allowedOrders = useMemo(() => isServiceManager
+    ? orders.filter(order => order.serviceManagerId === currentUser.id || (!!order.boxId && managedBoxIds.has(order.boxId)) || (order.assignedEmployeeIds || []).some(id => managedMechanics.has(id)))
+    : orders, [orders, isServiceManager, currentUser.id, managedBoxIds, managedMechanics]);
+  const periodOrders = useMemo(() => allowedOrders.filter(order => inPeriod(order.date, period, selectedDate)), [allowedOrders, period, selectedDate]);
+  const orderIds = useMemo(() => new Set(periodOrders.map(order => order.id)), [periodOrders]);
+  const periodServices = useMemo(() => services.filter(service => orderIds.has(service.orderId)), [services, orderIds]);
+  const periodSales = useMemo(() => productSales.filter(sale => inPeriod(sale.date, period, selectedDate)), [productSales, period, selectedDate]);
 
-      if (period === 'week') {
-        return diffDays <= 7;
-      }
-      if (period === 'month') {
-        return diffDays <= 30;
-      }
-      if (period === 'year') {
-        return diffDays <= 365;
-      }
-      return true; // 'all'
+  const serviceTotal = periodServices.reduce((sum, item) => sum + item.price, 0);
+  const servicePaid = periodServices.reduce((sum, item) => sum + (periodOrders.find(order => order.id === item.orderId)?.paymentStatus === 'paid' ? item.price : 0), 0);
+  const serviceUnpaid = serviceTotal - servicePaid;
+  const storeRevenue = periodSales.reduce((sum, sale) => sum + sale.finalAmount, 0);
+  const storePaid = periodSales.reduce((sum, sale) => sum + (sale.paymentStatus === 'paid' ? sale.finalAmount : 0), 0);
+  const storeProfit = periodSales.reduce((sum, sale) => sum + sale.items.reduce((saleProfit, item) => saleProfit + ((item.salePrice - item.purchasePrice) * item.quantity), 0) - sale.discount, 0);
+  const totalPaid = servicePaid + storePaid;
+  const uniqueClients = new Set([...periodOrders.map(order => `${order.clientFullName}|${order.clientPhone}`), ...periodSales.map(sale => `${sale.clientName}|${sale.clientPhone}`)]).size;
+
+  const employees = isServiceManager ? allUsers.filter(user => managedMechanics.has(user.id)) : allUsers.filter(user => user.role !== 'developer');
+  const employeeRows = employees.map(user => {
+    const assigned = periodServices.filter(item => item.mechanicId === user.id || item.coMechanicId === user.id);
+    const earnings = assigned.reduce((sum, item) => sum + (item.mechanicId === user.id ? item.mechanicEarning : item.coMechanicEarning || 0), 0);
+    const managerEarnings = periodServices.filter(item => item.serviceManagerId === user.id).reduce((sum, item) => sum + (item.serviceManagerEarning || 0), 0);
+    return { user, jobs: assigned.length, turnover: assigned.filter(item => item.mechanicId === user.id).reduce((sum, item) => sum + item.price, 0), earnings: earnings + managerEarnings };
+  }).filter(row => row.jobs > 0 || row.earnings > 0);
+
+  const exportCsv = () => {
+    const rows = periodOrders.map(order => {
+      const total = periodServices.filter(item => item.orderId === order.id).reduce((sum, item) => sum + item.price, 0);
+      return [order.date, order.clientFullName, order.clientPhone, order.carBrand, order.carNumber, total, order.paymentStatus].map(value => `"${String(value).replaceAll('"', '""')}"`).join(',');
     });
+    const blob = new Blob(['\uFEFF' + ['თარიღი,კლიენტი,ტელეფონი,ავტომობილი,ნომერი,სერვისის თანხა,გადახდა', ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `ფინანსური-რეპორტი-${selectedDate}.csv`; link.click(); URL.revokeObjectURL(url);
   };
 
-  // Filtered orders & services for current active period calculation
-  const periodOrders = filterOrdersByPeriod(orders, activePeriod);
-  const periodOrderIds = new Set(periodOrders.map((o) => o.id));
-  const periodServices = services.filter((srv) => periodOrderIds.has(srv.orderId));
-
-  const totalCompletedOrders = periodOrders.filter((o) => o.status === 'completed').length;
-
-  // Let's compute overall finances from the period selection services
-  let totalRevenue = 0;
-  let paidRevenue = 0;
-  let unpaidRevenue = 0;
-
-  // Count & Revenue of dynamic ServiceType categories
-  const categoryStats: Record<string, { revenue: number; count: number }> = {};
-
-  periodServices.forEach((srv) => {
-    const parentOrder = periodOrders.find((o) => o.id === srv.orderId);
-    if (!parentOrder) return;
-
-    totalRevenue += srv.price;
-
-    if (parentOrder.paymentStatus === 'paid') {
-      paidRevenue += srv.price;
-    } else {
-      unpaidRevenue += srv.price;
-    }
-
-    if (!categoryStats[srv.serviceType]) {
-      categoryStats[srv.serviceType] = { revenue: 0, count: 0 };
-    }
-    categoryStats[srv.serviceType].revenue += srv.price;
-    categoryStats[srv.serviceType].count += 1;
-  });
-
-  // Calculate mechanic-by-mechanic shares (ხელოსნების გამომუშავება)
-  interface MechanicPerformance {
-    id: string;
-    fullName: string;
-    username: string;
-    totalWorksCost: number;
-    totalEarned: number;
-    tasksCount: number;
-  }
-
-  const mechanicPerformances: MechanicPerformance[] = mechanics.map((mech) => {
-    const mySrvs = periodServices.filter((s) => s.mechanicId === mech.id || s.coMechanicId === mech.id);
-    const totalWorksCost = mySrvs.filter(s => s.mechanicId === mech.id).reduce((sum, s) => sum + s.price, 0);
-    const totalEarned = mySrvs.reduce((sum, s) =>
-      sum + (s.mechanicId === mech.id ? s.mechanicEarning : (s.coMechanicEarning || 0)), 0);
-
-    return {
-      id: mech.id,
-      fullName: `${mech.firstName} ${mech.lastName}`,
-      username: mech.username,
-      totalWorksCost,
-      totalEarned,
-      tasksCount: mySrvs.length,
-    };
-  });
-
-  // Calculate Admin / PaidTo shares (ვისთანაც გადაიხადეს იმისთვის დარიცხული 50% ანუ დარჩენილი წილები)
-  interface PaidToShare {
-    name: string;
-    totalReceived: number; // სერვისიდან სულ მიღებული თანხა გადახდისას
-    systemWalletShare: number; // 50% დარჩენილი წილი რომელიც ერგო ამ პერსონას
-    handymanPaidOut: number; // 50% რაც გაიცა ამ შეკვეთებიდან ხელოსნებზე
-  }
-
-  // Aggregate all paidTo shares
-  const paidToSharesRecords: Record<string, PaidToShare> = {};
-
-  // Initialize with admins or users to ensure 'ზვიადი' is visible
-  paidToSharesRecords['ზვიადი'] = { name: 'ზვიადი', totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
-  allUsers.forEach((u) => {
-    if (u.firstName !== 'ზვიადი') {
-      paidToSharesRecords[u.firstName] = { name: u.firstName, totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
-    }
-  });
-
-  // Calculate
-  periodOrders.forEach((order) => {
-    if (order.paymentStatus !== 'paid') return;
-    const orderSrvList = periodServices.filter((s) => s.orderId === order.id);
-    const paidToName = order.paidTo || 'ზვიადი';
-
-    if (!paidToSharesRecords[paidToName]) {
-      paidToSharesRecords[paidToName] = {
-        name: paidToName,
-        totalReceived: 0,
-        systemWalletShare: 0,
-        handymanPaidOut: 0,
-      };
-    }
-
-    orderSrvList.forEach((srv) => {
-      paidToSharesRecords[paidToName].totalReceived += srv.price;
-      const totalMechPay = srv.mechanicEarning + (srv.coMechanicEarning || 0);
-      const systemShare = srv.price - totalMechPay;
-      paidToSharesRecords[paidToName].systemWalletShare += systemShare;
-      paidToSharesRecords[paidToName].handymanPaidOut += totalMechPay;
-    });
-  });
-
-  // Keep only records that actually received money
-  const activePaidToShares = Object.values(paidToSharesRecords).filter(
-    (item) => item.totalReceived > 0
-  );
-
-  // Dynamic label for categories
-  const getCategoryLabel = (typeId: string) => {
-    if (typeId === 'diagnostic') return 'დიაგნოსტიკა';
-    if (typeId === 'electromechanics') return 'ელექტრო მექანიკა';
-    if (typeId === 'other') return 'სხვა სამუშაოები';
-    return typeId;
-  };
-
-  // Programmatic CSV Export tool function (Client-Side)
-  const handleExportCSV = () => {
-    const headers = [
-      'თარიღი (Date)',
-      'მარკა (Car)',
-      'სახ. ნომერი (Number)',
-      'კლიენტი (Client)',
-      'ტელეფონი (Phone)',
-      'მომსახურების რაოდენობა',
-      'ჯამური ფასი (Total Cost)',
-      'ხელოსნის გამომუშავება',
-      'გადახდილია ვისთან (Paid To)',
-      'სამუშაო სტატუსი',
-      'გადახდა',
-    ];
-
-    const rows = periodOrders.map((order) => {
-      const orderSrvList = periodServices.filter((s) => s.orderId === order.id);
-      const totalCost = orderSrvList.reduce((sum, s) => sum + s.price, 0);
-      const totalEarn = orderSrvList.reduce((sum, s) => sum + s.mechanicEarning, 0);
-
-      return [
-        order.date,
-        `"${order.carBrand.replace(/"/g, '""')}"`,
-        order.carNumber,
-        `"${order.clientFullName.replace(/"/g, '""')}"`,
-        order.clientPhone,
-        orderSrvList.length,
-        totalCost,
-        totalEarn,
-        order.paidTo || 'ზვიადი',
-        ORDER_STATUS_LABELS[order.status],
-        PAYMENT_STATUS_LABELS[order.paymentStatus],
-      ];
-    });
-
-    const csvContent =
-      '\uFEFF' + 
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `ავტოსერვისი_პერიოდული_ანგარიში_${activePeriod}_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  return (
-    <div className="max-w-lg mx-auto p-4 pb-24 bg-slate-950 text-slate-100 font-sans md:max-w-2xl">
-      <div className="flex flex-col gap-3 mb-5 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-bold tracking-tight text-slate-100 flex items-center gap-2">
-          <span className="bg-amber-500/10 p-2 rounded-xl text-amber-500 border border-amber-500/20">
-            <BarChart3 className="w-5 h-5" />
-          </span>
-          ფინანსური რეპორტი
-        </h2>
-
-        {/* Export buttons */}
-        <div className="flex gap-2 w-full sm:w-auto">
-          <button
-            id="export-csv-btn"
-            onClick={handleExportCSV}
-            className="flex items-center justify-center gap-1.5 text-xs text-slate-300 bg-slate-800 hover:bg-slate-700 font-bold px-3.5 py-2.5 rounded-xl cursor-pointer active:scale-95 transition-all text-center flex-1 sm:flex-none"
-          >
-            <Download className="w-4 h-4" />
-            CSV
-          </button>
-          {onExportExcel && (
-            <button
-              id="export-excel-btn"
-              onClick={onExportExcel}
-              className="flex items-center justify-center gap-1.5 text-xs text-slate-950 bg-emerald-500 hover:bg-emerald-600 font-black px-4 py-2.5 rounded-xl cursor-pointer shadow-lg shadow-emerald-500/10 active:scale-95 transition-all text-center flex-1 sm:flex-none"
-            >
-              <Download className="w-4 h-4" />
-              Excel (ყველაფერი)
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Modern Horizontal Period Selector Buttons */}
-      <div className="grid grid-cols-4 gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-xl mb-5 text-center text-xs">
-        {(['week', 'month', 'year', 'all'] as PeriodType[]).map((p) => {
-          const isActive = activePeriod === p;
-          return (
-            <button
-              id={`report-period-${p}`}
-              key={p}
-              onClick={() => setActivePeriod(p)}
-              className={`py-2 px-1.5 font-bold rounded-lg transition-all cursor-pointer truncate ${
-                isActive
-                  ? 'bg-amber-500 text-slate-950 shadow'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              {p === 'week' && 'კვირა'}
-              {p === 'month' && 'თვე'}
-              {p === 'year' && 'წელი'}
-              {p === 'all' && 'სულ'}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Main Stats metrics Cards */}
-      <div className="grid grid-cols-3 gap-2 mb-5 text-center">
-        <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl">
-          <span className="text-[10px] text-slate-500 font-bold uppercase block tracking-wider leading-tight">ბრუნვა</span>
-          <div className="text-base font-black text-slate-150 font-mono mt-0.5">{totalRevenue} ₾</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl">
-          <span className="text-[10px] text-green-500 font-bold uppercase block tracking-wider leading-tight">გადახდილი</span>
-          <div className="text-base font-black text-green-400 font-mono mt-0.5">{paidRevenue} ₾</div>
-        </div>
-        <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl">
-          <span className="text-[10px] text-rose-500 font-bold uppercase block tracking-wider leading-tight">გადაუხდელი</span>
-          <div className="text-base font-black text-rose-400 font-mono mt-0.5">{unpaidRevenue} ₾</div>
-        </div>
-      </div>
-
-      {/* ვისთან გადაიხადეს (Paid To Shares) - 50%/50% SPLIT AUDITING PANEL */}
-      <div className="flex items-center justify-between pl-1 mb-2.5">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
-          <Wallet className="w-3.5 h-3.5 text-green-400" />
-          თანხების მიმღებები და გადანაწილება (50%)
-        </h3>
-        <span className="text-[9px] text-slate-500 italic block leading-none">კასა (Paid To)</span>
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4.5 mb-5 shadow space-y-4">
-        {activePaidToShares.map((item) => {
-          return (
-            <div
-              key={item.name}
-              className="border-b border-slate-800/60 pb-3 last:border-0 last:pb-0 text-xs"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-1.5">
-                  <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 w-5 h-5 rounded-lg flex items-center justify-center text-[10px] font-bold">
-                    ₾
-                  </div>
-                  <h4 className="font-bold text-slate-200">
-                    მიმღები: <span className="text-amber-500">{item.name}</span>
-                  </h4>
-                </div>
-                <div className="font-mono text-slate-400">
-                  მიიღო სულ: <b className="text-slate-200 font-bold">{item.totalReceived} ₾</b>
-                </div>
-              </div>
-
-              {/* Graphical representation of splits */}
-              <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-950 p-2.5 rounded-xl border border-slate-850">
-                <div className="space-y-0.5 border-r border-slate-850 pr-2">
-                  <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wide">ზვიადის / სერვისის წილი (50%):</span>
-                  <span className="text-green-400 font-mono font-black">{item.systemWalletShare} ₾</span>
-                </div>
-                <div className="space-y-0.5 pl-2">
-                  <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wide">გაიცა ხელოსნებზე (50%):</span>
-                  <span className="text-cyan-400 font-mono font-black">{item.handymanPaidOut} ₾</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Dynamic service category stats */}
-      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5">
-        თანხები კატეგორიების მიხედვით
-      </h3>
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4.5 mb-5 shadow space-y-3">
-        {Object.keys(categoryStats).length === 0 ? (
-          <p className="text-xs text-slate-600 italic text-center py-2">არ ფიქსირდება სამუშაოები მითითებულ პერიოდში</p>
-        ) : (
-          Object.entries(categoryStats).map(([typeId, stats]) => {
-            const pct = totalRevenue > 0 ? (stats.revenue / totalRevenue) * 100 : 0;
-            return (
-              <div key={typeId} className="space-y-1">
-                <div className="flex justify-between text-xs font-medium">
-                  <span className="text-slate-300">
-                    • {getCategoryLabel(typeId)} ({stats.count} სამუშაო)
-                  </span>
-                  <span className="font-mono text-slate-100">{stats.revenue} ₾</span>
-                </div>
-                <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-850">
-                  <div
-                    className="bg-amber-500 h-1.5 rounded-full"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Mechanic Earnings Rating Section */}
-      <div className="flex items-center justify-between pl-1 mb-2.5">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-          ხელოსნების გამომუშავება და რეიტინგი
-        </h3>
-        <Award className="w-4 h-4 text-amber-500" />
-      </div>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow mb-5 space-y-4">
-        {mechanicPerformances.length === 0 ? (
-          <p className="text-xs text-slate-600 italic text-center py-2">პერსონალი არ არის დამატებული</p>
-        ) : (
-          mechanicPerformances.map((perf, index) => {
-            return (
-              <div
-                key={perf.id}
-                className="flex items-center justify-between border-b border-slate-800/60 pb-3 last:border-0 last:pb-0"
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className="bg-slate-950 border border-slate-850 text-slate-400 font-mono font-bold w-6 h-6 rounded-full flex items-center justify-center text-xs">
-                    {index + 1}
-                  </span>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-200">
-                      {perf.fullName}
-                    </h4>
-                    <span className="text-[10px] text-slate-500 font-sans">
-                      შესრულებულია: <b>{perf.tasksCount}</b> მომსახურება
-                    </span>
-                  </div>
-                </div>
-
-                <div className="text-right font-mono">
-                  <div className="text-xs text-slate-300">
-                    ბრუნვა: <b className="text-slate-200">{perf.totalWorksCost} ₾</b>
-                  </div>
-                  <div className="text-xs font-black text-cyan-400">
-                    გამომუშავება: <b>{perf.totalEarned} ₾</b>
-                  </div>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* Date-wise timeline metadata */}
-      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5 flex items-center gap-1">
-        <CalendarDays className="w-3.5 h-3.5" />
-        მომსახურების დინამიკა პერიოდში
-      </h3>
-
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow text-xs space-y-2 font-sans">
-        <div className="flex justify-between items-center py-1.5 border-b border-slate-800/50">
-          <span className="text-slate-400">აქტიური პერიოდი:</span>
-          <span className="text-slate-200 font-bold bg-slate-950 border border-slate-850 px-2.5 py-1 rounded-lg flex items-center gap-1 uppercase text-[10px]">
-            <Clock className="w-3 h-3 text-amber-500" />
-            {activePeriod === 'week' && 'უკანასკნელი 7 დღე'}
-            {activePeriod === 'month' && 'უკანასკნელი 30 დღე'}
-            {activePeriod === 'year' && 'უკანასკნელი 365 დღე'}
-            {activePeriod === 'all' && 'მთლიანი პერიოდი'}
-          </span>
-        </div>
-        <div className="flex justify-between items-center py-1 bg-slate-950/40 rounded px-2">
-          <span className="text-slate-500">გატარებული მანქანების რაოდენობა პერიოდში:</span>
-          <span className="font-mono text-slate-200 font-bold">{periodOrders.length}</span>
-        </div>
-        <div className="flex justify-between items-center py-1 bg-slate-950/40 rounded px-2">
-          <span className="text-slate-500">დასრულებული სამუშაოების სტატუსით:</span>
-          <span className="font-mono text-slate-200 font-bold">{totalCompletedOrders}</span>
-        </div>
-        <div className="flex justify-between items-center py-1 bg-slate-950/40 rounded px-2">
-          <span className="text-slate-500">საშუალო შემოსავალი ერთ მანქანაზე:</span>
-          <span className="font-mono text-amber-500 font-bold">
-            {periodOrders.length > 0 ? (totalRevenue / periodOrders.length).toFixed(1) : 0} ₾
-          </span>
-        </div>
-      </div>
-    </div>
-  );
+  return <div className="max-w-6xl mx-auto p-4 pb-24 space-y-5">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-black flex items-center gap-2"><span className="p-2 rounded-xl bg-amber-500/10 text-amber-400"><BarChart3 className="w-5 h-5" /></span>{isServiceManager ? 'ჩემი ბოქსების ფინანსები' : 'სრული ფინანსური ანალიტიკა'}</h2><div className="flex gap-2"><button onClick={exportCsv} className="px-3 py-2 text-xs font-bold rounded-xl bg-slate-800"><Download className="w-4 h-4 inline mr-1" />CSV</button>{onExportExcel && <button onClick={onExportExcel} className="px-3 py-2 text-xs font-black rounded-xl bg-emerald-500 text-slate-950">Excel</button>}</div></div>
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-3 md:flex-row md:items-center"><div className="grid grid-cols-5 gap-1 flex-1">{(['day', 'week', 'month', 'year', 'all'] as Period[]).map(item => <button key={item} onClick={() => setPeriod(item)} className={`py-2 rounded-lg text-xs font-bold ${period === item ? 'bg-amber-500 text-slate-950' : 'text-slate-400'}`}>{({ day: 'დღე', week: 'კვირა', month: 'თვე', year: 'წელი', all: 'სულ' })[item]}</button>)}</div><label className="flex items-center gap-2 text-xs text-slate-400"><CalendarDays className="w-4 h-4" /><input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-slate-200" /></label></div>
+    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">{[["სულ ბრუნვა", serviceTotal + storeRevenue, 'text-slate-100'], ["მიღებული", totalPaid, 'text-emerald-400'], ["დავალიანება", serviceUnpaid + (storeRevenue - storePaid), 'text-rose-400'], ["მაღაზიის მოგება", storeProfit, 'text-cyan-400'], ["კლიენტები", uniqueClients, 'text-amber-400']].map(([label, value, color]) => <div key={String(label)} className="bg-slate-900 border border-slate-800 rounded-2xl p-4"><span className="block text-[10px] uppercase font-bold text-slate-500">{label}</span><b className={`block mt-1 text-lg font-mono ${color}`}>{typeof value === 'number' && label !== 'კლიენტები' ? money(value) : value}</b></div>)}</div>
+    <div className="grid lg:grid-cols-2 gap-4"><section className="bg-slate-900 border border-slate-800 rounded-2xl p-4"><h3 className="font-bold text-sm flex gap-2 items-center"><Wallet className="w-4 h-4 text-emerald-400" />შემოსავლების წყაროები</h3><div className="mt-4 space-y-3 text-xs">{[["სერვისი", serviceTotal, servicePaid], ["მაღაზია", storeRevenue, storePaid]].map(([name, total, paid]) => <div key={String(name)} className="bg-slate-950 rounded-xl p-3"><div className="flex justify-between"><b>{name}</b><b>{money(Number(total))}</b></div><div className="flex justify-between mt-1 text-slate-500"><span>მიღებული: {money(Number(paid))}</span><span>დავალიანება: {money(Number(total) - Number(paid))}</span></div></div>)}</div></section><section className="bg-slate-900 border border-slate-800 rounded-2xl p-4"><h3 className="font-bold text-sm flex gap-2 items-center"><Store className="w-4 h-4 text-cyan-400" />მაღაზიის დეტალები</h3><div className="mt-4 grid grid-cols-2 gap-3 text-xs"><div className="bg-slate-950 rounded-xl p-3"><span className="text-slate-500">ტრანზაქციები</span><b className="block text-base mt-1">{periodSales.length}</b></div><div className="bg-slate-950 rounded-xl p-3"><span className="text-slate-500">მოგება</span><b className="block text-base mt-1 text-cyan-400">{money(storeProfit)}</b></div></div></section></div>
+    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-4"><h3 className="font-bold text-sm flex gap-2 items-center"><Users className="w-4 h-4 text-amber-400" />{isServiceManager ? 'ჩემი ხელოსნების დარიცხვები' : 'თანამშრომლების დარიცხვები'}</h3><div className="mt-3 overflow-x-auto"><table className="w-full text-xs"><thead className="text-left text-slate-500 border-b border-slate-800"><tr><th className="pb-2">თანამშრომელი</th><th className="pb-2">სამუშაო</th><th className="pb-2">ბრუნვა</th><th className="pb-2 text-right">დასარიცხი</th></tr></thead><tbody>{employeeRows.map(row => <tr key={row.user.id} className="border-b border-slate-800/60"><td className="py-3 font-bold">{row.user.firstName} {row.user.lastName}</td><td>{row.jobs}</td><td>{money(row.turnover)}</td><td className="text-right text-cyan-400 font-mono font-bold">{money(row.earnings)}</td></tr>)}{employeeRows.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-slate-500">არჩეულ პერიოდში ჩანაწერი არ არის.</td></tr>}</tbody></table></div></section>
+  </div>;
 }

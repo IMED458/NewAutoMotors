@@ -19,6 +19,7 @@ interface DashboardViewProps {
 }
 
 interface OrderCardProps {
+  key?: string;
   order: CarServiceOrder;
   allUsers: User[];
   onSelectOrder: (id: string) => void;
@@ -83,7 +84,7 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
         <div className="flex items-center gap-1 flex-wrap mb-2.5 pl-2">
           {assignees.map(u => (
             <span key={u.id} className="text-[10px] bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full font-semibold">
-              {u.firstName}
+              {u.firstName} {u.lastName}
             </span>
           ))}
         </div>

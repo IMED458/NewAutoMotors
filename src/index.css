@@ -6,3 +6,10 @@ textarea,
 select {
   font-size: 16px !important;
 }
+
+@media print {
+  body * { visibility: hidden !important; }
+  #print-invoice, #print-invoice *, #print-day-closing, #print-day-closing * { visibility: visible !important; }
+  #print-invoice, #print-day-closing { position: absolute; inset: 0; width: 100%; }
+  .print\:hidden { display: none !important; }
+}

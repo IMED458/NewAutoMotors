@@ -21,6 +21,7 @@ export interface User {
 
 export type OrderStatus = 'new' | 'pending' | 'completed';
 export type PaymentStatus = 'paid' | 'unpaid';
+export type PaymentMethod = 'cash' | 'card' | 'tbc' | 'bog' | 'transfer';
 
 export interface CarServiceOrder {
   id: string;
@@ -32,6 +33,8 @@ export interface CarServiceOrder {
   problemDescription: string;
   status: OrderStatus;
   paymentStatus: PaymentStatus;
+  /** Payment channel for service work. Kept separately from shop sales. */
+  paymentMethod?: PaymentMethod;
   paidTo?: string;
   createdBy: string;
   createdAt: string;
@@ -292,6 +295,10 @@ export function calculateMechanicEarning(
 }
 
 export function hasModule(user: User, mod: string): boolean {
+  // Financial visibility is a role responsibility, not an optional toggle.
+  if (mod === 'reports' && (user.role === 'service_manager' || user.role === 'accountant')) return true;
+  // Accountants must be able to review and reprint every archived daily close.
+  if (mod === 'day_closing' && user.role === 'accountant') return true;
   return isOwnerLike(user.role) || user.role === 'developer' || (user.enabledModules ?? []).includes(mod);
 }
 

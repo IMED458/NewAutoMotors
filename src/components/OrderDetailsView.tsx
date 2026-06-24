@@ -3,10 +3,11 @@ import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, calculateMechanicEarning, ROLE_LABELS,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isOwnerLike,
-  RevenueShareConfig, ClientSource, computeRevenueShares,
+  RevenueShareConfig, ClientSource, PaymentMethod, computeRevenueShares,
 } from '../types';
-import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
+import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X, ReceiptText } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import InvoiceModal from './InvoiceModal';
 
 interface OrderDetailsViewProps {
   order: CarServiceOrder;
@@ -26,6 +27,7 @@ export default function OrderDetailsView({
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
   const isAdminLike = isAdminRole(currentUser.role);
+  const canGenerateInvoice = ['super_admin', 'general_manager', 'service_manager', 'developer'].includes(currentUser.role);
 
   // Edit lock (#6): a car registered by a SERVICE MANAGER cannot be edited by a mechanic.
   // (A car registered by a mechanic can still be edited by the service manager.)
@@ -42,6 +44,7 @@ export default function OrderDetailsView({
   );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [showInvoice, setShowInvoice] = useState(false);
 
   useEffect(() => {
     setDraftOrder({ ...order });
@@ -181,6 +184,12 @@ export default function OrderDetailsView({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500 font-mono">ID: {draftOrder.id.split('-')[1] || draftOrder.id}</span>
+          {canGenerateInvoice && (
+            <button onClick={() => setShowInvoice(true)}
+              className="flex items-center gap-1 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 px-2.5 py-1.5 rounded-xl font-black cursor-pointer">
+              <ReceiptText className="w-3.5 h-3.5" /> ინვოისი
+            </button>
+          )}
           {isOwnerLike(currentUser.role) && onDeleteOrder && (
             <button
               onClick={() => { if (confirm('ნამდვილად წაიშალოს ეს დავალება? (ყველა სერვისი წაიშლება)')) onDeleteOrder(order.id); }}
@@ -309,14 +318,12 @@ export default function OrderDetailsView({
                 </div>
               </div>
               <div>
-                <span className="block text-[10px] text-slate-500 font-bold uppercase mb-1.5">
-                  გადახდა {isMechanic && '(მხოლოდ ადმინი)'}:
-                </span>
+                <span className="block text-[10px] text-slate-500 font-bold uppercase mb-1.5">გადახდა:</span>
                 <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                   {(['unpaid', 'paid'] as PaymentStatus[]).map(pay => (
-                    <button key={pay} disabled={isMechanic}
+                    <button key={pay}
                       onClick={() => setDraftOrder(prev => ({ ...prev, paymentStatus: pay, paidTo: pay === 'paid' ? prev.paidTo || paidToOptions[0]?.label || '' : undefined }))}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all ${isMechanic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
+                      className={`py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
                         draftOrder.paymentStatus === pay
                           ? pay === 'paid' ? 'bg-green-500 text-slate-950' : 'bg-rose-500 text-slate-100'
                           : 'text-slate-400 hover:text-slate-200'
@@ -332,10 +339,16 @@ export default function OrderDetailsView({
               <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
                 className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <label className="block text-[10px] text-amber-500 uppercase font-bold">ვისთან მოხდა გადახდა?</label>
-                <select disabled={isMechanic} value={draftOrder.paidTo || paidToOptions[0]?.label || ''}
+                <select value={draftOrder.paidTo || paidToOptions[0]?.label || ''}
                   onChange={e => setDraftOrder(prev => ({ ...prev, paidTo: e.target.value }))}
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
                   {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
+                </select>
+                <label className="block text-[10px] text-slate-500 uppercase font-bold pt-1">გადახდის მეთოდი</label>
+                <select value={draftOrder.paymentMethod || 'cash'}
+                  onChange={e => setDraftOrder(prev => ({ ...prev, paymentMethod: e.target.value as PaymentMethod }))}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
+                  <option value="cash">ნაღდი</option><option value="card">ბარათი</option><option value="tbc">TBC</option><option value="bog">BOG</option><option value="transfer">გადარიცხვა</option>
                 </select>
               </motion.div>
             )}
@@ -538,7 +551,7 @@ export default function OrderDetailsView({
                         }
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
-                      {mechanics.map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
+                      {(isMechanic ? mechanics.filter(m => m.id === currentUser.id) : mechanics).map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
                     </select>
                   </div>
 
@@ -738,7 +751,7 @@ export default function OrderDetailsView({
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {!mechanicLocked && (
+                            {!mechanicLocked && !isMechanic && (
                               <button onClick={() => { if (confirm('წაიშალოს მომსახურება?')) setDraftServices(prev => prev.filter(s => s.id !== srv.id)); }}
                                 className="p-2 border border-red-500/20 bg-red-950/20 text-red-400 hover:text-red-300 rounded-xl cursor-pointer">
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -790,6 +803,7 @@ export default function OrderDetailsView({
             : <><Save className="w-4 h-4 stroke-[2.5]" /> ყველა ცვლილების შენახვა</>}
         </button>
       </div>
+      {showInvoice && <InvoiceModal order={draftOrder} services={draftServices} issuedBy={currentUser} onClose={() => setShowInvoice(false)} />}
     </motion.div>
   );
 }

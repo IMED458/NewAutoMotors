@@ -3,7 +3,7 @@ import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
   Box, RevenueShareConfig, DEFAULT_REVENUE_SHARE,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike, isLimitedModuleRole,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike, isLimitedModuleRole, mechanicIdsForManager,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { exportAllToExcel } from './utils/excelExport';
@@ -305,6 +305,10 @@ export default function App() {
   const mechanicsList = users.filter(u => u.role === 'mechanic');
   const isAdminLike = isAdminRole(currentUser.role);
   const serviceTypeNames = serviceConfigs.map(c => ({ id: c.id, name: c.name }));
+  const serviceManagerMechanicIds = new Set(mechanicIdsForManager(boxes, currentUser.id));
+  const visibleOrders = currentUser.role === 'service_manager'
+    ? orders.filter(order => order.serviceManagerId === currentUser.id || (!!order.boxId && boxes.some(box => box.id === order.boxId && box.serviceManagerId === currentUser.id)) || (order.assignedEmployeeIds || []).some(id => serviceManagerMechanicIds.has(id)))
+    : orders;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
@@ -345,7 +349,7 @@ export default function App() {
                 <>
                   {currentTab === 'dashboard' && (
                     <DashboardView
-                      orders={orders}
+                      orders={visibleOrders}
                       currentUser={currentUser}
                       allUsers={users}
                       onSelectOrder={handleSelectOrder}
@@ -354,7 +358,7 @@ export default function App() {
                   )}
                   {currentTab === 'history' && (
                     <HistoryView
-                      orders={orders}
+                      orders={visibleOrders}
                       services={services}
                       mechanics={executorsList}
                       serviceConfigs={serviceConfigs}
@@ -384,8 +388,10 @@ export default function App() {
                     <ReportsView
                       orders={orders}
                       services={services}
-                      mechanics={executorsList}
+                      productSales={productSales}
                       allUsers={users}
+                      boxes={boxes}
+                      currentUser={currentUser}
                       onExportExcel={handleExportExcel}
                     />
                   )}
@@ -394,7 +400,7 @@ export default function App() {
                   )}
                   {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && (
                     <DayClosingSection
-                      orders={orders}
+                      orders={visibleOrders}
                       services={services}
                       productSales={productSales}
                       dailyClosings={dailyClosings}
@@ -417,7 +423,7 @@ export default function App() {
                   )}
                   {currentTab === 'earnings' && (
                     <MechanicPanelView
-                      orders={orders}
+                      orders={visibleOrders}
                       services={services}
                       currentUser={currentUser}
                       allUsers={users}
@@ -495,8 +501,10 @@ export default function App() {
                     <ReportsView
                       orders={orders}
                       services={services}
-                      mechanics={executorsList}
+                      productSales={productSales}
                       allUsers={users}
+                      boxes={boxes}
+                      currentUser={currentUser}
                       onExportExcel={handleExportExcel}
                     />
                   )}

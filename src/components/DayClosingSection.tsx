@@ -21,10 +21,12 @@ export default function DayClosingSection({
 }: DayClosingSectionProps) {
   const [closingNote, setClosingNote] = useState('დღიური ფინანსური ნაშთი ემთხვევა სალაროს. ხარვეზები არ დაფიქსირებულა.');
   const [lastClosedReport, setLastClosedReport] = useState<DailyClosing | null>(null);
+  const [archiveDate, setArchiveDate] = useState('');
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   const isSuper = currentUser.role === 'super_admin';
+  const canBrowseArchive = ['accountant', 'super_admin', 'general_manager', 'developer'].includes(currentUser.role);
 
   // 1. Calculate Today's Services Revenue (from completed orders TODAY and their respective service items)
   const todayOrders = orders.filter((o) => o.date === todayStr);
@@ -84,12 +86,17 @@ export default function DayClosingSection({
   let bogReceived = 0;
   let transferReceived = 0;
 
-  // Add from Paid Service Orders (defaulting to cash entry)
+  // Add from paid service orders using the method recorded on the order.
   todayOrders.forEach((o) => {
     if (o.paymentStatus === 'paid') {
       const orderServices = services.filter((s) => s.orderId === o.id);
       const total = orderServices.reduce((sSum, s) => sSum + s.price, 0);
-      cashReceived += total;
+      const method = o.paymentMethod || 'cash';
+      if (method === 'cash') cashReceived += total;
+      else if (method === 'card') cardReceived += total;
+      else if (method === 'tbc') tbcReceived += total;
+      else if (method === 'bog') bogReceived += total;
+      else if (method === 'transfer') transferReceived += total;
     }
   });
 
@@ -196,6 +203,19 @@ export default function DayClosingSection({
               დღიურ ანგარიშში აისახება რეალურ დროში გაყიდული ნებისმიერი პროდუქტი ან შესრულებული მანქანის სერვისი.
             </p>
           </div>
+        </div>
+      )}
+
+      {canBrowseArchive && dailyClosings.length > 0 && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col gap-3 sm:flex-row sm:items-end print:hidden">
+          <div className="flex-1">
+            <label className="block text-[10px] uppercase font-bold text-slate-500 mb-1">არქივიდან დღის დახურვის ნახვა</label>
+            <select value={archiveDate} onChange={e => setArchiveDate(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200">
+              <option value="">— აირჩიეთ თარიღი —</option>
+              {[...dailyClosings].sort((a, b) => b.date.localeCompare(a.date)).map(closing => <option key={closing.id} value={closing.id}>{closing.date} · {closing.totalReceived.toLocaleString()} ₾</option>)}
+            </select>
+          </div>
+          <button disabled={!archiveDate} onClick={() => { const report = dailyClosings.find(c => c.id === archiveDate); if (report) setLastClosedReport(report); }} className="px-4 py-2 bg-amber-500 text-slate-950 rounded-lg font-black text-xs disabled:opacity-40">ნახვა / ბეჭდვა</button>
         </div>
       )}
 
@@ -380,7 +400,7 @@ export default function DayClosingSection({
       {/* DETAILED DRILLDOWN POPUP RECEIPT FOR LAST CLOSED */}
       {lastClosedReport && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-white text-slate-950 border border-slate-300 w-full max-w-sm rounded-xl p-5 shadow-2xl relative select-text">
+          <div id="print-day-closing" className="bg-white text-slate-950 border border-slate-300 w-full max-w-sm rounded-xl p-5 shadow-2xl relative select-text print:max-w-none print:rounded-none print:border-0">
             <div className="text-center space-y-1">
               <Printer className="w-7 h-7 text-indigo-500 mx-auto" />
               <h3 className="text-sm font-black led-none uppercase tracking-widest font-mono">დღიური ფინანსური დახურვა</h3>
